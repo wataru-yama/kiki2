@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>機材貸出管理システム</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <?!= include('Stylesheet'); ?>
+  </head>
+  <body>
+    <!-- モバイルメニュー -->
+    <div class="mobile-menu">
+      <div class="mobile-menu-row">
+        <div class="mobile-menu-title">機材貸出管理</div>
+        <div class="mobile-menu-buttons">
+          <button class="mobile-menu-btn" id="mobile-menu-undo" title="元に戻す">
+            <i class="material-icons">undo</i>
+          </button>
+          <button class="mobile-menu-btn" id="mobile-manage-projects" title="現場管理">
+            <i class="material-icons">business</i>
+          </button>
+          <button class="mobile-menu-btn" id="mobile-manage-equipment" title="機材管理">
+            <i class="material-icons">build</i>
+          </button>
+          <button class="mobile-menu-btn" id="toggle-pc-view" title="PC表示">
+            <i class="material-icons">desktop_windows</i>
+          </button>
+          <!-- 文字サイズスライダーをここに追加 -->
+          <div class="font-size-control-wrapper">
+            <label>文字サイズ:</label>
+            <input type="range" id="font-size-slider" min="10" max="20" value="12">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading" class="hidden">
+      <div class="preloader-wrapper big active">
+        <div class="spinner-layer spinner-blue-only">
+          <div class="circle-clipper left">
+            <div class="circle"></div>
+          </div>
+          <div class="gap-patch">
+            <div class="circle"></div>
+          </div>
+          <div class="circle-clipper right">
+            <div class="circle"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ヘッダー部分 -->
+    <div class="header">
+      <div class="container">
+        <h4>機材貸出管理システム</h4>
+        <div class="user-info" id="user-info">ログインユーザー: <span id="username">ゲスト</span></div>
+        <!-- 管理ボタンをヘッダー内に配置 -->
+        <div class="management-buttons no-margin">
+          <button class="btn waves-effect waves-light" id="manage-projects-btn">
+            <i class="material-icons left">business</i>現場マスター管理
+          </button>
+          <button class="btn waves-effect waves-light" id="manage-equipment-btn">
+            <i class="material-icons left">build</i>機器マスター管理
+          </button>
+          <button class="btn waves-effect waves-light" id="toggle-mobile-view">
+            <i class="material-icons left">smartphone</i>モバイル表示
+          </button>
+        </div>
+        
+        <!-- 機材選択と日付指定部分 -->
+        <div class="row equipment-selector no-margin">
+          <div class="input-field col s12 m6">
+            <select id="equipment-select" class="browser-default">
+              <option value="" disabled selected>機材を選択してください</option>
+            </select>
+          </div>
+          <div class="col s12 m6 view-controls">
+            <div class="date-picker-container">
+              <input type="text" id="custom-date-picker" class="datepicker" placeholder="日付指定">
+              <label for="custom-date-picker">開始日</label>
+              <i class="material-icons calendar-icon" id="calendar-trigger">event</i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="container">
+      <!-- 元に戻すボタンと確認チェックボックス -->
+      <div class="row no-margin" id="control-buttons">
+        <div class="col s6">
+          <button class="btn waves-effect waves-light undo-button" id="undo-button" disabled>
+            <i class="material-icons left">undo</i>元に戻す
+          </button>
+        </div>
+        <div class="col s6 right-align">
+          <div class="settings-panel">
+            <label>
+              <input type="checkbox" id="confirm-dialog-checkbox" checked />
+              <span>変更時に確認する</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="gantt-container">
+        <div id="gantt-chart">
+          <div class="gantt-row gantt-header">
+            <div class="gantt-item">機材名</div>
+            <div class="gantt-dates" id="date-headers">
+              <!-- 日付ヘッダーはJavaScriptで動的に生成 -->
+            </div>
+          </div>
+          <div id="gantt-rows">
+            <!-- 機材行はJavaScriptで動的に生成 -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 貸出モーダル -->
+    <div id="rental-modal" class="modal">
+      <div class="modal-content">
+        <h4>機材貸出登録</h4>
+        <div class="row no-margin">
+          <div class="input-field col s12">
+            <input id="rental-equipment" type="text" disabled>
+            <label for="rental-equipment" class="active">機材名称</label>
+          </div>
+        </div>
+        <div class="row no-margin">
+          <div class="input-field col s6">
+            <input id="rental-start" type="text" class="datepicker">
+            <label for="rental-start" class="active">借用開始日</label>
+          </div>
+          <div class="input-field col s6">
+            <input id="rental-end" type="text" class="datepicker">
+            <label for="rental-end" class="active">借用終了日</label>
+          </div>
+        </div>
+        <div class="row no-margin">
+          <div class="input-field col s6">
+            <div class="quantity-control">
+              <button type="button" class="btn-small quantity-btn minus">-</button>
+              <input id="rental-quantity" type="number" min="1" value="1" style="width: 60px; text-align: center; font-size: 12px;">
+              <button type="button" class="btn-small quantity-btn plus">+</button>
+            </div>
+            <label for="rental-quantity" class="active">数量</label>
+          </div>
+          <div class="input-field col s6">
+            <select id="rental-project" class="browser-default">
+              <option value="" disabled selected>現場を選択</option>
+            </select>
+          </div>
+        </div>
+        <div class="row no-margin">
+          <div class="input-field col s12">
+            <input id="new-project" type="text">
+            <label for="new-project">新しい現場名</label>
+            <span class="helper-text">リストにない場合は新しい現場名を入力</span>
+          </div>
+        </div>
+        <!-- 貸出元情報（非表示） -->
+        <input id="rental-source-location" type="hidden">
+      </div>
+      <div class="modal-footer">
+        <button class="modal-close waves-effect waves-green btn-flat">キャンセル</button>
+        <button id="save-rental" class="waves-effect waves-green btn">保存</button>
+      </div>
+    </div>
+
+    <!-- 返却モーダル -->
+    <div id="return-modal" class="modal">
+      <div class="modal-content">
+        <h4>機材返却登録</h4>
+        <div class="row no-margin">
+          <div class="input-field col s12">
+            <input id="return-equipment" type="text" disabled>
+            <label for="return-equipment" class="active">機材名称</label>
+          </div>
+        </div>
+        <div class="row no-margin">
+          <div class="input-field col s6">
+            <input id="return-date" type="text" class="datepicker">
+            <label for="return-date" class="active">返却日</label>
+          </div>
+          <div class="input-field col s6">
+            <select id="return-quantity" class="browser-default" style="font-size: 12px;">
+              <!-- JavaScriptで動的に生成 -->
+            </select>
+            <label for="return-quantity" class="active">返却台数</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-close waves-effect waves-green btn-flat">キャンセル</button>
+        <button id="save-return" class="waves-effect waves-green btn">返却登録</button>
+      </div>
+    </div>
+
+    <!-- 現場マスター管理モーダル -->
+    <div id="projects-modal" class="modal modal-fixed-footer">
+      <div class="modal-content">
+        <h4 style="font-size: 16px;">現場マスター管理</h4>
+        <div class="row no-margin">
+          <!-- 現場追加フォーム -->
+          <div class="col s6" style="padding-right: 10px;">
+            <h5 style="font-size: 12px; font-weight: bold;">現場の追加</h5>
+            <div class="input-field">
+              <input id="new-project-name" type="text">
+              <label for="new-project-name">新しい現場名</label>
+            </div>
+            <div class="right-align">
+              <button id="add-project-btn" class="waves-effect waves-light btn">
+                <i class="material-icons left">add</i>追加
+              </button>
+            </div>
+          </div>
+          
+          <!-- 現場リスト -->
+          <div class="col s6" style="padding-left: 10px;">
+            <h5 style="font-size: 12px; font-weight: bold;">現場一覧</h5>
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;">
+              <table class="striped">
+                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+                  <tr>
+                    <th width="50px">選択</th>
+                    <th>現場名</th>
+                    <th>作成日</th>
+                  </tr>
+                </thead>
+                <tbody id="projects-list">
+                  <!-- JavaScriptで動的に生成 -->
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- 現場削除ボタン -->
+            <div class="center-align" style="margin-top: 10px;">
+              <button id="delete-projects-btn" class="waves-effect waves-light btn red">
+                <i class="material-icons left">delete</i>選択した現場を削除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-close waves-effect waves-green btn-flat">閉じる</button>
+      </div>
+    </div>
+
+    <!-- 機器マスター管理モーダル -->
+    <div id="equipment-modal" class="modal modal-fixed-footer">
+      <div class="modal-content">
+        <h4 style="font-size: 16px;">機器マスター管理</h4>
+        <div class="row no-margin">
+          <!-- 機器追加フォーム -->
+          <div class="col s6" style="padding-right: 10px;">
+            <h5 style="font-size: 12px; font-weight: bold;">機器の追加</h5>
+            <div class="row no-margin">
+              <div class="input-field col s12">
+                <input id="new-equipment-name" type="text" required style="font-size: 12px;">
+                <label for="new-equipment-name">機器名称 *</label>
+              </div>
+              <div class="input-field col s12">
+                <input id="new-equipment-spec" type="text" style="font-size: 12px;">
+                <label for="new-equipment-spec">仕様</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-model" type="text" style="font-size: 12px;">
+                <label for="new-equipment-model">型番</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-maker" type="text" style="font-size: 12px;">
+                <label for="new-equipment-maker">メーカー</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-serial" type="text" style="font-size: 12px;">
+                <label for="new-equipment-serial">シリアルNo</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-quantity" type="number" min="1" required style="font-size: 12px;">
+                <label for="new-equipment-quantity">総台数 *</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-alias" type="text" style="font-size: 12px;">
+                <label for="new-equipment-alias">呼称</label>
+              </div>
+              <div class="input-field col s6">
+                <select id="new-equipment-location" class="browser-default" style="font-size: 12px;">
+                  <option value="" selected>定置場所を選択</option>
+                </select>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-note1" type="text" style="font-size: 12px;">
+                <label for="new-equipment-note1">備考1</label>
+              </div>
+              <div class="input-field col s6">
+                <input id="new-equipment-note2" type="text" style="font-size: 12px;">
+                <label for="new-equipment-note2">備考2</label>
+              </div>
+              <div class="col s12 right-align">
+                <button id="add-equipment-btn" class="waves-effect waves-light btn">
+                  <i class="material-icons left">add</i>追加
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 機器リスト -->
+          <div class="col s6" style="padding-left: 10px;">
+            <h5 style="font-size: 12px; font-weight: bold;">機器一覧</h5>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;">
+              <table class="striped">
+                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+                  <tr>
+                    <th width="40px">選択</th>
+                    <th width="40px">番号</th>
+                    <th>名称</th>
+                    <th>型番</th>
+                    <th>台数</th>
+                  </tr>
+                </thead>
+                <tbody id="equipment-list">
+                  <!-- JavaScriptで動的に生成 -->
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- 機器削除ボタン -->
+            <div class="center-align" style="margin-top: 10px;">
+              <button id="delete-equipment-btn" class="waves-effect waves-light btn red">
+                <i class="material-icons left">delete</i>選択した機器を削除
+              </button>
+              <button id="undo-equipment-delete-btn" class="waves-effect waves-light btn orange">
+                <i class="material-icons left">restore</i>削除を元に戻す
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-close waves-effect waves-green btn-flat">閉じる</button>
+      </div>
+    </div>
+
+    <!-- PCに戻すボタン -->
+    <button class="return-to-desktop" id="return-to-desktop">
+      <i class="material-icons">desktop_windows</i>
+    </button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>
