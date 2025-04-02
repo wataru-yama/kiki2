@@ -271,7 +271,7 @@ function adjustCalendarHeight() {
 }
 
 /**
- * 貸出バーを描画
+ * 貸出バーを描画 - 修正版
  */
 function renderRentalBars() {
   // アクティブな貸出データを抽出
@@ -280,29 +280,56 @@ function renderRentalBars() {
     return;
   }
   
-  const activeRentals = rentalData.filter(rental => rental.status === 'active');
+  logDebug(`貸出データ: ${rentalData.length}件`);
+  
+  // 実際にアクティブな貸出かどうかをチェック（ステータスとデータの両方を確認）
+  const activeRentals = rentalData.filter(rental => {
+    // rental.statusが存在しない場合や'active'でない場合はdebugを出力
+    if (!rental.status || rental.status !== 'active') {
+      logDebug(`非アクティブな貸出をスキップ: ID=${rental.id}, status=${rental.status}`);
+      return false;
+    }
+    return true;
+  });
   
   if (activeRentals.length === 0) {
-    logDebug('表示する貸出データがありません');
+    logDebug('表示する貸出データがありません（アクティブな貸出が0件）');
     return;
   }
   
   logDebug(`アクティブな貸出: ${activeRentals.length}件を描画します`);
+  
+  // 選択機材フィルターが適用されているかを確認
+  if (selectedEquipmentId) {
+    logDebug(`選択機材フィルター: ${selectedEquipmentId}`);
+  }
   
   // 貸出バーを描画
   activeRentals.forEach(rental => {
     try {
       // 選択機材フィルターが適用されていて、選択されていない機材の場合はスキップ
       if (selectedEquipmentId && rental.equipmentId !== selectedEquipmentId) {
+        logDebug(`選択外の機材貸出をスキップ: ID=${rental.id}, 機材=${rental.equipmentId}`);
         return;
       }
       
-      const startDate = new Date(rental.startDate);
-      const endDate = new Date(rental.endDate);
+      // 日付確認（文字列をDate型に変換）
+      const startDate = rental.startDate ? new Date(rental.startDate) : null;
+      const endDate = rental.endDate ? new Date(rental.endDate) : null;
+      
+      if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        logDebug(`無効な日付の貸出をスキップ: ID=${rental.id}, 開始=${rental.startDate}, 終了=${rental.endDate}`);
+        return;
+      }
+      
+      // 開始日と終了日を夜0時に設定して日付計算を正確に
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
       
       // 表示期間内かチェック（一部でも重なっていれば表示）
       if (endDate < currentStartDate || startDate > currentEndDate) {
-        return; // 表示期間外
+        logDebug(`表示期間外の貸出をスキップ: ID=${rental.id}, 開始=${formatDate(startDate)}, 終了=${formatDate(endDate)}`);
+        return;
       }
       
       // 該当する機材の行を検索
@@ -313,12 +340,17 @@ function renderRentalBars() {
       }
       
       // 開始日からの日数とオフセットを計算
-      let startDayOffset = Math.floor((startDate - currentStartDate) / (24 * 60 * 60 * 1000));
-      startDayOffset = Math.max(0, startDayOffset); // 負の値は0に
+      const startDayDiff = Math.floor((startDate - currentStartDate) / (24 * 60 * 60 * 1000));
+      let startDayOffset = Math.max(0, startDayDiff); // 負の値は0に
       
       // 表示期間内の終了日を計算
       const displayEndDate = new Date(Math.min(endDate.getTime(), currentEndDate.getTime()));
-      const durationDays = Math.ceil((displayEndDate - Math.max(startDate, currentStartDate)) / (24 * 60 * 60 * 1000)) + 1;
+      const displayStartDate = new Date(Math.max(startDate.getTime(), currentStartDate.getTime()));
+      
+      // 期間の計算（日数）
+      const durationDays = Math.ceil((displayEndDate - displayStartDate) / (24 * 60 * 60 * 1000)) + 1;
+      
+      logDebug(`貸出バー位置計算: ID=${rental.id}, 開始オフセット=${startDayOffset}, 期間=${durationDays}日`);
       
       // 貸出バーの作成
       const rentalBar = document.createElement('div');
@@ -358,7 +390,7 @@ function renderRentalBars() {
       // 貸出バーを行に追加
       calendarRow.appendChild(rentalBar);
       
-      logDebug(`貸出バー描画: ID=${rental.id}, 機材=${rental.equipmentId}, 開始オフセット=${startDayOffset}, 期間=${durationDays}日`);
+      logDebug(`貸出バー描画完了: ID=${rental.id}, 機材=${rental.equipmentId}, 位置=${rentalBar.style.left}, 幅=${rentalBar.style.width}`);
       
     } catch (error) {
       console.error(`貸出バー描画エラー: ID=${rental.id}`, error);
@@ -917,6 +949,8 @@ function resetScroll() {
  * 貸出データを再描画（貸出バーのみ更新）
  */
 function refreshRentalBars() {
+  logDebug('貸出バーの再描画を開始');
+  
   // 既存の貸出バーをすべて削除
   const rentalBars = document.querySelectorAll('.rental-bar');
   rentalBars.forEach(bar => {
