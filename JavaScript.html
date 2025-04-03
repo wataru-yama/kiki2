@@ -4484,127 +4484,90 @@ function createDesktopLayout(days) {
   
   // 貸出変更確認ダイアログを表示する関数
   function showRentalUpdateConfirmation(rentalId, oldEquipmentId, newEquipmentId, startDateStr, endDateStr, oldLocation, newLocation, successCallback) {
-  // IDが空の場合のエラー防止
-  if (!rentalId) {
-    console.error('貸出IDが空です');
-    resetBarPosition();
-    return;
-  }
-  
-  // 機材情報の取得
-  const oldEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(oldEquipmentId));
-  const newEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(newEquipmentId));
-  
-  if (!oldEquipment || !newEquipment) {
-    alert('機材情報の取得に失敗しました');
-    resetBarPosition();
-    return;
-  }
-  
-  // 貸出情報の取得 - ID検索を改善
-  let rental = null;
-  
-  // 1. 完全一致で検索
-  rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
-  
-  // 2. 完全一致しない場合は部分一致で検索
-  if (!rental) {
-    console.log('完全一致する貸出データが見つかりません。部分一致で検索します。');
+    // 機材情報の取得
+    const oldEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(oldEquipmentId));
+    const newEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(newEquipmentId));
     
-    rental = rentalData.find(item => {
-      if (!item['登録日時']) return false;
-      
-      const itemId = item['登録日時'].toString();
-      return itemId.includes(rentalId) || rentalId.includes(itemId);
-    });
-  }
-  
-  // 3. それでも見つからない場合は機器番号と日付で検索（フォールバック）
-  if (!rental) {
-    console.log('部分一致でも見つかりません。機器番号と日付で検索します。');
-    
-    rental = rentalData.find(item => 
-      String(item['機器管理番号']) === String(oldEquipmentId) && 
-      item['ステータス'] === '貸出中' &&
-      (!item['返却日'])
-    );
-  }
-  
-  if (!rental) {
-    console.error('貸出検索失敗。ID:', rentalId);
-    console.log('利用可能な貸出データ:', rentalData.length);
-    
-    // エラーメッセージを改善
-    alert('貸出データの取得に失敗しました。画面を更新してから再試行してください。');
-    resetBarPosition();
-    return;
-  }
-  
-  // 機材変更の場合は台数制限の確認
-  if (oldEquipmentId !== newEquipmentId || oldLocation !== newLocation) {
-    // 新しい機材の総台数を確認
-    const newEquipItems = equipmentList.filter(item => 
-      String(item['機器管理番号']) === String(newEquipmentId) && 
-      String(item['定置場所'] || '') === String(newLocation)
-    );
-    
-    const totalQuantity = newEquipItems.reduce((sum, item) => sum + (parseInt(item['総台数']) || 0), 0);
-    const requestedQuantity = parseInt(rental['数量']) || 1;
-    
-    if (requestedQuantity > totalQuantity) {
-      alert(`${newEquipment['機器名称']}(${newLocation})の総台数(${totalQuantity}台)を超えています。変更する場合は貸出数量を調整してください。`);
+    if (!oldEquipment || !newEquipment) {
+      alert('機材情報の取得に失敗しました');
       resetBarPosition();
       return;
     }
-  }
-  
-  // 日付の妥当性チェック
-  const startDate = new Date(startDateStr);
-  const endDate = new Date(endDateStr);
-  
-  if (startDate > endDate) {
-    alert('開始日は終了日よりも前の日付にしてください');
-    resetBarPosition();
-    return;
-  }
-  
-  // 貸出可能性のチェック
-  if (!checkAvailabilityForUpdate(newEquipmentId, startDateStr, endDateStr, rental['数量'], rentalId, newLocation)) {
-    resetBarPosition();
-    return;
-  }
-  
-  // 確認ダイアログの表示有無を確認
-  if (userSettings.showConfirmDialog) {
-    // 確認メッセージを構築
-    let message = '以下の内容で貸出情報を更新しますか？\n\n';
     
-    if (oldEquipmentId !== newEquipmentId) {
-      message += `機材: ${oldEquipment['機器名称']} → ${newEquipment['機器名称']}\n`;
-    }
+    // 貸出情報の取得
+    const rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
     
-    if (oldLocation !== newLocation) {
-      message += `定置場所: ${oldLocation || '未設定'} → ${newLocation || '未設定'}\n`;
-    }
-    
-    message += `期間: ${formatDate(new Date(rental['借用開始日']))} ～ ${formatDate(new Date(rental['借用終了日']))}\n`;
-    message += `　 → ${startDateStr} ～ ${endDateStr}\n`;
-    message += `数量: ${rental['数量']}台\n`;
-    message += `使用場所: ${rental['使用場所']}\n`;
-    
-    // 確認ダイアログを表示
-    if (confirm(message)) {
-      // 更新処理を実行
-      updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
-    } else {
-      // キャンセルの場合は元の位置に戻す
+    if (!rental) {
+      alert('貸出情報の取得に失敗しました');
       resetBarPosition();
+      return;
     }
-  } else {
-    // 確認なしで直接更新
-    updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
+    
+    // 機材変更の場合は台数制限の確認
+    if (oldEquipmentId !== newEquipmentId || oldLocation !== newLocation) {
+      // 新しい機材の総台数を確認
+      const newEquipItems = equipmentList.filter(item => 
+        String(item['機器管理番号']) === String(newEquipmentId) && 
+        String(item['定置場所'] || '') === String(newLocation)
+      );
+      
+      const totalQuantity = newEquipItems.reduce((sum, item) => sum + (parseInt(item['総台数']) || 0), 0);
+      const requestedQuantity = parseInt(rental['数量']) || 1;
+      
+      if (requestedQuantity > totalQuantity) {
+        alert(`${newEquipment['機器名称']}(${newLocation})の総台数(${totalQuantity}台)を超えています。変更する場合は貸出数量を調整してください。`);
+        resetBarPosition();
+        return;
+      }
+    }
+    
+    // 日付の妥当性チェック
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    
+    if (startDate > endDate) {
+      alert('開始日は終了日よりも前の日付にしてください');
+      resetBarPosition();
+      return;
+    }
+    
+    // 貸出可能性のチェック
+    if (!checkAvailabilityForUpdate(newEquipmentId, startDateStr, endDateStr, rental['数量'], rentalId, newLocation)) {
+      resetBarPosition();
+      return;
+    }
+    
+    // 確認ダイアログの表示有無を確認
+    if (userSettings.showConfirmDialog) {
+      // 確認メッセージを構築
+      let message = '以下の内容で貸出情報を更新しますか？\n\n';
+      
+      if (oldEquipmentId !== newEquipmentId) {
+        message += `機材: ${oldEquipment['機器名称']} → ${newEquipment['機器名称']}\n`;
+      }
+      
+      if (oldLocation !== newLocation) {
+        message += `定置場所: ${oldLocation || '未設定'} → ${newLocation || '未設定'}\n`;
+      }
+      
+      message += `期間: ${formatDate(new Date(rental['借用開始日']))} ～ ${formatDate(new Date(rental['借用終了日']))}\n`;
+      message += `　 → ${startDateStr} ～ ${endDateStr}\n`;
+      message += `数量: ${rental['数量']}台\n`;
+      message += `使用場所: ${rental['使用場所']}\n`;
+      
+      // 確認ダイアログを表示
+      if (confirm(message)) {
+        // 更新処理を実行
+        updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
+      } else {
+        // キャンセルの場合は元の位置に戻す
+        resetBarPosition();
+      }
+    } else {
+      // 確認なしで直接更新
+      updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
+    }
   }
-}
 
   // 貸出更新時の貸出可能性チェック（重複・台数チェック）
   function checkAvailabilityForUpdate(equipmentId, startDate, endDate, requestedQuantity, excludeRentalId, location) {
@@ -4924,41 +4887,57 @@ function createDesktopLayout(days) {
 
   // 文字サイズの更新とそれに応じたレイアウト調整
 	function updateFontSize(fontSize) {
-  try {
-    // モバイル文字サイズ設定
-    const fontSizePx = parseInt(fontSize);
-    
-    if (isNaN(fontSizePx)) return;
-    
-    // ルート要素のカスタムプロパティに設定
-    document.documentElement.style.setProperty('--mobile-font-size', fontSizePx + 'px');
-    
-    // 特定の要素に直接適用
-    const elementsToAdjust = document.querySelectorAll('.gantt-item, .equipment-name, .equipment-location, .equipment-stock, .gantt-date, .rental-bar');
-    elementsToAdjust.forEach(el => {
-      el.style.fontSize = fontSizePx + 'px';
-    });
-    
-    // 貸出バーのサイズ調整
-    const rentalBars = document.querySelectorAll('.rental-bar');
-    rentalBars.forEach(bar => {
-      // 文字サイズに応じて高さも調整
-      const heightValue = Math.max(40, fontSizePx * 2.5);
-      bar.style.minHeight = heightValue + 'px';
-    });
-    
-    // レイアウト調整のためにガントチャートの高さも更新
-    setTimeout(() => {
-      adjustGanttHeight();
-    }, 100);
-    
-    // 確実に保存
-    localStorage.setItem('mobileFontSize', fontSizePx.toString());
-    
-  } catch (error) {
-    console.error('フォントサイズ更新エラー:', error);
-  }
-}
+	  // フォントサイズをルート要素に適用
+	  document.documentElement.style.fontSize = fontSize + 'px';
+	  
+	  // PC・モバイル共通の文字サイズ調整
+	  const elements = document.querySelectorAll('.gantt-item, .equipment-name, .equipment-location, .equipment-stock, .equipment-detail');
+	  elements.forEach(el => {
+	    el.style.fontSize = `${fontSize}px`;
+	  });
+	  
+	  // 日付ヘッダーのフォントサイズ調整
+	  document.querySelectorAll('.gantt-date').forEach(el => {
+	    el.style.fontSize = `${Math.max(10, parseInt(fontSize) * 0.9)}px`;
+	  });
+	  
+	  // レンタルバーのフォントサイズ調整
+	  document.querySelectorAll('.rental-bar').forEach(el => {
+	    el.style.fontSize = `${parseInt(fontSize) * 0.9}px`;
+	    
+	    // バーの高さも調整
+	    if (document.body.classList.contains('mobile-view')) {
+	      // モバイル表示の場合はより大きく
+	      const newHeight = Math.max(30, parseInt(fontSize) * 2);
+	      el.style.height = `${newHeight}px`;
+	      el.style.lineHeight = `${newHeight - 10}px`;
+	    } else {
+	      // PC表示の場合は適度なサイズに
+	      const newHeight = Math.max(25, parseInt(fontSize) * 1.5);
+	      el.style.height = `${newHeight}px`;
+	      el.style.lineHeight = `${newHeight - 10}px`;
+	    }
+	  });
+	  
+	  // ガントチャートを再描画（レイアウト修正のため）
+	  setTimeout(() => {
+	    const ganttContainer = document.querySelector('.gantt-container');
+	    if (ganttContainer) {
+	      // スクロール位置を保存
+	      const savedScrollLeft = ganttContainer.scrollLeft;
+	      const savedScrollTop = ganttContainer.scrollTop;
+	      
+	      // 再描画
+	      updateGanttChart();
+	      
+	      // スクロール位置を復元
+	      setTimeout(() => {
+	        ganttContainer.scrollLeft = savedScrollLeft;
+	        ganttContainer.scrollTop = savedScrollTop;
+	      }, 100);
+	    }
+	  }, 200);
+	}
 
 	// スライダーの設定
 	function setupMobileSupport() {
@@ -5600,37 +5579,28 @@ function moveToNextPeriod() {
 
   // PC版フォントサイズ更新
   function updatePCFontSize(fontSize) {
-    // CSSカスタムプロパティを使用して文字サイズを設定
-    document.documentElement.style.setProperty('--base-font-size', fontSize + 'px');
-    
-    // PCモードの場合のみフォントサイズ適用
-    if (!document.body.classList.contains('mobile-view')) {
-      // 明示的に文字サイズを設定
-      document.querySelectorAll('.font-adjusted, .gantt-item, .gantt-date, .equipment-name, .equipment-detail').forEach(el => {
-        el.style.fontSize = fontSize + 'px';
-      });
-      
-      // ガントチャートを再描画（サイズ調整のため）
-      setTimeout(() => {
-        // スクロール位置を保存
-        const container = document.querySelector('.gantt-container');
-        const savedScrollTop = container ? container.scrollTop : 0;
-        const savedScrollLeft = container ? container.scrollLeft : 0;
-        
-        // チャート更新
-        adjustGanttHeight();
-        
-        // スクロール位置を復元
-        if (container) {
-          container.scrollTop = savedScrollTop;
-          container.scrollLeft = savedScrollLeft;
-        }
-      }, 300);
-    }
-    
-    // 保存して次回も同じサイズで表示
-    localStorage.setItem('pcFontSize', fontSize);
-  }
+	  document.documentElement.style.setProperty('--pc-font-size', fontSize + 'px');
+	  
+	  // PCモードの場合のみフォントサイズ適用
+	  if (!document.body.classList.contains('mobile-view')) {
+	    document.body.style.fontSize = fontSize + 'px';
+	    
+	    // 重要なクラスに明示的にフォントサイズを設定
+	    document.querySelectorAll('.gantt-item, .gantt-date, .equipment-name, .equipment-detail').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	    
+	    // モーダル内の要素にもフォントサイズを設定
+	    document.querySelectorAll('.modal .modal-content, .modal-footer, .modal label, .modal input, .modal select').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	    
+	    // 確認チェックボックスのテキストサイズ修正
+	    document.querySelectorAll('.settings-panel span').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	  }
+	}
 
   // カレンダーナビゲーションボタンの修正
 	function setupCalendarNavigation() {
@@ -5705,7 +5675,7 @@ function moveToNextPeriod() {
 	      format: 'yyyy-mm-dd',
 	      autoClose: true,
 	      setDefaultDate: input.value ? true : false,
-	      defaultDate: input.value ? new Date(input.value) : ,
+	      defaultDate: input.value ? new Date(input.value) : null,
 	      onSelect: function(date) {
 	        // 選択した日付を設定
 	        input.value = formatDate(date);
@@ -5824,7 +5794,7 @@ function moveToNextPeriod() {
   labelRight.id = 'date-slider-label-right';
   labelRight.textContent = '次へ ▶';
   
-  // 本日ボタンを追加
+  // 本日ボタンを追加（新規）
   const todayBtn = document.createElement('button');
   todayBtn.id = 'date-slider-today';
   todayBtn.className = 'btn waves-effect waves-light date-slider-today';
@@ -5834,7 +5804,7 @@ function moveToNextPeriod() {
   sliderContainer.appendChild(labelLeft);
   sliderContainer.appendChild(slider);
   sliderContainer.appendChild(labelRight);
-  sliderContainer.appendChild(todayBtn);
+  sliderContainer.appendChild(todayBtn); // 本日ボタンを追加
   
   // ガントチャート直前に挿入
   const ganttContainer = document.querySelector('.gantt-container');
@@ -5842,23 +5812,9 @@ function moveToNextPeriod() {
     ganttContainer.parentNode.insertBefore(sliderContainer, ganttContainer);
   }
   
-  // スライダーイベントリスナー - モバイル強化
+  // スライダーイベントリスナー
   slider.addEventListener('input', function(e) {
     // スライダー位置に基づいて日付ヘッダーをスクロール
-    const dateHeaders = document.querySelector('#date-headers');
-    if (dateHeaders) {
-      const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-      const scrollPos = (scrollWidth * e.target.value) / 100;
-      dateHeaders.scrollLeft = scrollPos;
-      
-      // 同期してタイムラインもスクロール
-      syncTimelineScroll(scrollPos);
-    }
-  });
-  
-  // 特にモバイル向けにタッチ終了時の処理を追加
-  slider.addEventListener('touchend', function(e) {
-    // スライダー位置に基づいて日付ヘッダーをスクロール（タッチ終了時にも実行）
     const dateHeaders = document.querySelector('#date-headers');
     if (dateHeaders) {
       const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
@@ -5879,12 +5835,12 @@ function moveToNextPeriod() {
     moveToNextPeriod();
   });
   
-  // 本日ボタンクリックイベント
+  // 本日ボタンクリックイベント（新規）
   todayBtn.addEventListener('click', function() {
     goToToday();
   });
   
-  // 横スクロール時にスライダーを同期 - モバイル対応強化
+  // 横スクロール時にスライダーを同期
   const dateHeaders = document.querySelector('#date-headers');
   if (dateHeaders) {
     dateHeaders.addEventListener('scroll', function() {
@@ -5897,28 +5853,9 @@ function moveToNextPeriod() {
         syncTimelineScroll(scrollPos);
       }
     });
-    
-    // モバイル対応強化 - タッチスクロール用
-    dateHeaders.addEventListener('touchmove', function() {
-      const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-      if (scrollWidth > 0) {
-        const scrollPos = dateHeaders.scrollLeft;
-        slider.value = (scrollPos / scrollWidth) * 100;
-        
-        // 同期してタイムラインもスクロール
-        syncTimelineScroll(scrollPos);
-      }
-    });
-  }
-  
-  // モバイル環境の場合、追加のスワイプサポートを設定
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-    setupMobileSwipeSupport();
   }
 }
-
-
-	// タイムラインのスクロールを同期する関数
+	// 2. タイムラインのスクロールを同期する関数（新規）
 function syncTimelineScroll(scrollPos) {
   const timelines = document.querySelectorAll('.gantt-timeline');
   timelines.forEach(timeline => {
@@ -5938,211 +5875,5 @@ function goToToday() {
   if (slider) {
     slider.value = 0;
   }
-}
-// 3. スライダー値からカレンダースクロール位置を計算する関数
-function syncCalendarWithSlider(sliderValue) {
-  const dateHeaders = document.querySelector('#date-headers');
-  if (dateHeaders) {
-    const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-    const scrollPos = (scrollWidth * sliderValue) / 100;
-    
-    // 日付ヘッダーのスクロール
-    dateHeaders.scrollLeft = scrollPos;
-    
-    // 全タイムラインと同期
-    const timelines = document.querySelectorAll('.gantt-timeline');
-    timelines.forEach(timeline => {
-      timeline.scrollLeft = scrollPos;
-    });
-  }
-}
-// 4. スクロール位置からスライダー値を更新
-function updateSliderFromScroll(element) {
-  const slider = document.getElementById('date-slider');
-  if (slider && element) {
-    const scrollWidth = element.scrollWidth - element.clientWidth;
-    if (scrollWidth > 0) {
-      const scrollPos = element.scrollLeft;
-      slider.value = (scrollPos / scrollWidth) * 100;
-    }
-  }
-}
-// 5. 縦横切り替え検出
-function setupOrientationChange() {
-  // 向き変更イベントをリッスン
-  window.addEventListener('orientationchange', function() {
-    // 遅延してレイアウトを調整（アニメーション完了後）
-    setTimeout(() => {
-      adjustGanttHeight();
-      updateGanttChart();
-    }, 500);
-  });
-  
-  // リサイズイベントも追加（縦横比変更検出用）
-  window.addEventListener('resize', debounce(function() {
-    adjustGanttHeight();
-  }, 250));
-}
-// 6. デバウンス関数（イベント連続発火防止）
-function debounce(func, wait) {
-  let timeout;
-  return function() {
-    const context = this;
-    const args = arguments;
-    clearTimeout(timeout);
-    timeout = setTimeout(() => {
-      func.apply(context, args);
-    }, wait);
-  };
-}
-
-// 7. モバイル特有の処理を強化
-function setupMobileSupport() {
-  try {
-    // デバイスがモバイルかどうかを判定
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // モバイル設定を読み込む
-    loadMobileSettings();
-    
-    // モバイルデバイスでは自動的にモバイルビューに切り替え
-    if (isMobile && !document.body.classList.contains('mobile-view')) {
-      document.body.classList.add('mobile-view');
-    }
-    
-    // PCに戻すボタン設定
-    document.getElementById('return-to-desktop')?.addEventListener('click', function() {
-      document.body.classList.remove('mobile-view');
-      updateMobileSettings();
-      // スクロール位置をリセット
-      savedScrollPosition = { top: 0, left: 0 };
-      updateGanttChart();
-    });
-    
-    // 文字サイズスライダー設定 - 改善版
-    const fontSizeSlider = document.getElementById('font-size-slider');
-    if (fontSizeSlider) {
-      // 保存された値を設定
-      const savedFontSize = localStorage.getItem('mobileFontSize') || '30';
-      fontSizeSlider.value = savedFontSize;
-      
-      // 即時適用
-      updateFontSize(savedFontSize);
-      
-      // スライダー変更イベント - 改善版
-      fontSizeSlider.addEventListener('input', function(e) {
-        const fontSize = e.target.value;
-        updateFontSize(fontSize);
-        localStorage.setItem('mobileFontSize', fontSize);
-      });
-      
-      // 変更完了時にも適用
-      fontSizeSlider.addEventListener('change', function(e) {
-        const fontSize = e.target.value;
-        updateFontSize(fontSize);
-        localStorage.setItem('mobileFontSize', fontSize);
-        
-        // 遅延して再適用（より確実に）
-        setTimeout(() => {
-          updateFontSize(fontSize);
-        }, 100);
-      });
-    }
-    
-    // 縦横切り替え検出を設定
-    setupOrientationChange();
-    
-    // タッチデバイスならカレンダー操作を強化
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-      setupEnhancedTouchSupport();
-    }
-  } catch (error) {
-    console.error('モバイル対応設定エラー:', error);
-  }
-}
-// 8. タッチ操作の強化
-function setupEnhancedTouchSupport() {
-  // 日付ヘッダーと各タイムラインの同期を強化
-  const dateHeaders = document.querySelector('#date-headers');
-  if (dateHeaders) {
-    dateHeaders.addEventListener('scroll', debounce(function() {
-      const scrollPosition = this.scrollLeft;
-      
-      // すべてのタイムラインに同期
-      document.querySelectorAll('.gantt-timeline').forEach(timeline => {
-        timeline.scrollLeft = scrollPosition;
-      });
-      
-      // スライダーにも同期
-      updateSliderFromScroll(this);
-    }, 5)); // ほぼリアルタイムだが、頻度を少し抑制
-    
-    // タッチでのスワイプ操作を強化
-    let touchStartX = 0;
-    
-    dateHeaders.addEventListener('touchstart', function(e) {
-      touchStartX = e.touches[0].clientX;
-    });
-    
-    dateHeaders.addEventListener('touchmove', function(e) {
-      const touchCurrentX = e.touches[0].clientX;
-      const touchDiffX = touchStartX - touchCurrentX;
-      
-      // スクロール位置を調整
-      this.scrollLeft += touchDiffX / 2; // 抵抗感を持たせる
-      touchStartX = touchCurrentX;
-      
-      // 全タイムラインと同期
-      const scrollPosition = this.scrollLeft;
-      document.querySelectorAll('.gantt-timeline').forEach(timeline => {
-        timeline.scrollLeft = scrollPosition;
-      });
-      
-      // スライダーと同期
-      updateSliderFromScroll(this);
-    });
-  }
-}
-// モバイル向けスワイプサポート強化
-function setupMobileSwipeSupport() {
-  const dateHeaders = document.querySelector('#date-headers');
-  if (!dateHeaders) return;
-  
-  let touchStartX = 0;
-  let touchStartScrollLeft = 0;
-  
-  // タッチ開始
-  dateHeaders.addEventListener('touchstart', function(e) {
-    touchStartX = e.touches[0].clientX;
-    touchStartScrollLeft = this.scrollLeft;
-  });
-  
-  // タッチ移動
-  dateHeaders.addEventListener('touchmove', function(e) {
-    if (!touchStartX) return;
-    
-    const touchDiff = touchStartX - e.touches[0].clientX;
-    this.scrollLeft = touchStartScrollLeft + touchDiff;
-    
-    // 全タイムラインと同期
-    syncTimelineScroll(this.scrollLeft);
-    
-    // スライダーと同期
-    const slider = document.getElementById('date-slider');
-    if (slider) {
-      const scrollWidth = this.scrollWidth - this.clientWidth;
-      if (scrollWidth > 0) {
-        slider.value = (this.scrollLeft / scrollWidth) * 100;
-      }
-    }
-    
-    // デフォルトのスクロール動作を許可
-    e.stopPropagation();
-  });
-  
-  // タッチ終了
-  dateHeaders.addEventListener('touchend', function() {
-    touchStartX = 0;
-  });
 }
 </script>
