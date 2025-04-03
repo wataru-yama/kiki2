@@ -10,7 +10,7 @@
     <?!= include('Stylesheet'); ?>
   </head>
   <body>
-    <!-- モバイルメニュー -->
+    <!-- モバイルメニュー修正 -->
     <div class="mobile-menu">
       <div class="mobile-menu-row">
         <div class="mobile-menu-title">機材貸出管理</div>
@@ -27,11 +27,13 @@
           <button class="mobile-menu-btn" id="toggle-pc-view" title="PC表示">
             <i class="material-icons">desktop_windows</i>
           </button>
-          <!-- 文字サイズスライダーをここに追加 -->
-          <div class="font-size-control-wrapper">
-            <label>文字サイズ:</label>
-            <input type="range" id="font-size-slider" min="10" max="20" value="12">
-          </div>
+        </div>
+      </div>
+      <!-- 文字サイズスライダーを別行に移動 -->
+      <div class="mobile-menu-row">
+        <div class="font-size-control-wrapper">
+          <label>文字サイズ:</label>
+          <input type="range" id="font-size-slider" min="10" max="20" value="16">
         </div>
       </div>
     </div>
@@ -121,7 +123,7 @@
       </div>
     </div>
 
-    <!-- 貸出モーダル -->
+    <!-- 貸出モーダル修正 -->
     <div id="rental-modal" class="modal">
       <div class="modal-content">
         <h4>機材貸出登録</h4>
@@ -145,7 +147,7 @@
           <div class="input-field col s6">
             <div class="quantity-control">
               <button type="button" class="btn-small quantity-btn minus">-</button>
-              <input id="rental-quantity" type="number" min="1" value="1" style="width: 60px; text-align: center; font-size: 12px;">
+              <input id="rental-quantity" type="number" min="1" value="1" style="width: 60px; text-align: center;">
               <button type="button" class="btn-small quantity-btn plus">+</button>
             </div>
             <label for="rental-quantity" class="active">数量</label>
@@ -172,7 +174,7 @@
       </div>
     </div>
 
-    <!-- 返却モーダル -->
+    <!-- 返却モーダル修正 -->
     <div id="return-modal" class="modal">
       <div class="modal-content">
         <h4>機材返却登録</h4>
@@ -188,7 +190,7 @@
             <label for="return-date" class="active">返却日</label>
           </div>
           <div class="input-field col s6">
-            <select id="return-quantity" class="browser-default" style="font-size: 12px;">
+            <select id="return-quantity" class="browser-default">
               <!-- JavaScriptで動的に生成 -->
             </select>
             <label for="return-quantity" class="active">返却台数</label>
@@ -201,14 +203,14 @@
       </div>
     </div>
 
-    <!-- 現場マスター管理モーダル -->
+    <!-- 現場マスター管理モーダル修正 -->
     <div id="projects-modal" class="modal modal-fixed-footer">
       <div class="modal-content">
-        <h4 style="font-size: 16px;">現場マスター管理</h4>
+        <h4>現場マスター管理</h4>
         <div class="row no-margin">
           <!-- 現場追加フォーム -->
           <div class="col s6" style="padding-right: 10px;">
-            <h5 style="font-size: 12px; font-weight: bold;">現場の追加</h5>
+            <h5>現場の追加</h5>
             <div class="input-field">
               <input id="new-project-name" type="text">
               <label for="new-project-name">新しい現場名</label>
@@ -222,10 +224,10 @@
           
           <!-- 現場リスト -->
           <div class="col s6" style="padding-left: 10px;">
-            <h5 style="font-size: 12px; font-weight: bold;">現場一覧</h5>
-            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;">
+            <h5>現場一覧</h5>
+            <div class="scrollable-list">
               <table class="striped">
-                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+                <thead class="sticky-header">
                   <tr>
                     <th width="50px">選択</th>
                     <th>現場名</th>
@@ -252,54 +254,54 @@
       </div>
     </div>
 
-    <!-- 機器マスター管理モーダル -->
+    <!-- 機器マスター管理モーダル修正 -->
     <div id="equipment-modal" class="modal modal-fixed-footer">
       <div class="modal-content">
-        <h4 style="font-size: 16px;">機器マスター管理</h4>
+        <h4>機器マスター管理</h4>
         <div class="row no-margin">
           <!-- 機器追加フォーム -->
           <div class="col s6" style="padding-right: 10px;">
-            <h5 style="font-size: 12px; font-weight: bold;">機器の追加</h5>
+            <h5>機器の追加</h5>
             <div class="row no-margin">
               <div class="input-field col s12">
-                <input id="new-equipment-name" type="text" required style="font-size: 12px;">
+                <input id="new-equipment-name" type="text" required>
                 <label for="new-equipment-name">機器名称 *</label>
               </div>
               <div class="input-field col s12">
-                <input id="new-equipment-spec" type="text" style="font-size: 12px;">
+                <input id="new-equipment-spec" type="text">
                 <label for="new-equipment-spec">仕様</label>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-model" type="text" style="font-size: 12px;">
+                <input id="new-equipment-model" type="text">
                 <label for="new-equipment-model">型番</label>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-maker" type="text" style="font-size: 12px;">
+                <input id="new-equipment-maker" type="text">
                 <label for="new-equipment-maker">メーカー</label>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-serial" type="text" style="font-size: 12px;">
+                <input id="new-equipment-serial" type="text">
                 <label for="new-equipment-serial">シリアルNo</label>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-quantity" type="number" min="1" required style="font-size: 12px;">
+                <input id="new-equipment-quantity" type="number" min="1" required>
                 <label for="new-equipment-quantity">総台数 *</label>
               </div>
-              <<div class="input-field col s6">
-                <input id="new-equipment-alias" type="text" style="font-size: 12px;">
+              <div class="input-field col s6">
+                <input id="new-equipment-alias" type="text">
                 <label for="new-equipment-alias">呼称</label>
               </div>
               <div class="input-field col s6">
-                <select id="new-equipment-location" class="browser-default" style="font-size: 12px;">
+                <select id="new-equipment-location" class="browser-default">
                   <option value="" selected>定置場所を選択</option>
                 </select>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-note1" type="text" style="font-size: 12px;">
+                <input id="new-equipment-note1" type="text">
                 <label for="new-equipment-note1">備考1</label>
               </div>
               <div class="input-field col s6">
-                <input id="new-equipment-note2" type="text" style="font-size: 12px;">
+                <input id="new-equipment-note2" type="text">
                 <label for="new-equipment-note2">備考2</label>
               </div>
               
@@ -313,10 +315,10 @@
           
           <!-- 機器リスト -->
           <div class="col s6" style="padding-left: 10px;">
-            <h5 style="font-size: 12px; font-weight: bold;">機器一覧</h5>
-            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px;">
+            <h5>機器一覧</h5>
+            <div class="scrollable-list">
               <table class="striped">
-                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+                <thead class="sticky-header">
                   <tr>
                     <th width="40px">選択</th>
                     <th width="40px">番号</th>
@@ -348,7 +350,7 @@
       </div>
     </div>
 
-    <!-- PCに戻すボタン -->
+    <!-- PCに戻すボタン修正 -->
     <button class="return-to-desktop" id="return-to-desktop">
       <i class="material-icons">desktop_windows</i>
     </button>
