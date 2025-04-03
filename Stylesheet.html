@@ -203,17 +203,17 @@
   }
   
   .gantt-container {
-	  overflow-x: auto;
-	  overflow-y: auto;
-	  margin-top: 5px;
-	  margin-bottom: 5px; /* 下部のマージンを追加 */
-	  border: 1px solid #e0e0e0;
-	  border-radius: 4px;
-	  /* flex: 1; の削除 - これが空間を作る原因 */
-	  min-height: auto; /* 200pxから変更 */
-	  height: auto; /* 自動高さに変更 */
-	  max-height: none; /* 不要な最大高さ制限を削除 */
-	}
+    overflow-x: hidden; /* 横スクロールは内部要素で制御 */
+    overflow-y: auto;   /* 縦スクロールを有効化 */
+    margin-top: 5px;
+    margin-bottom: 5px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    min-height: 400px; /* 最小高さを設定 */
+    height: 60vh; /* 画面の60%の高さを使用 */
+    max-height: 70vh; /* 最大でも画面の70% */
+    position: relative;
+  }
   
   .gantt-row {
     display: flex;
@@ -229,9 +229,11 @@
     background-color: #f5f5f5;
     min-height: 40px;
     box-shadow: 0 2px 2px rgba(0,0,0,0.05);
+    width: 100%; /* 幅を100%に */
   }
   
-  .gantt-item {
+  /* 5. 機材名カラムを固定 */
+	.gantt-item {
     position: sticky;
     left: 0;
     z-index: 10;
@@ -271,9 +273,13 @@
     margin-bottom: 3px;
   }
   
+  /* 3. 日付部分の横スクロール対応 */
   .gantt-dates {
     display: flex;
     flex: 1;
+    overflow-x: auto; /* 横スクロール可能に */
+    width: calc(100% - 250px); /* 機材名部分を除いた幅 */
+    scroll-behavior: smooth; /* スムーズスクロール */
   }
   
   .gantt-date {
@@ -291,11 +297,15 @@
     background-color: rgba(38, 166, 154, 0.1);
   }
   
+  /* 4. タイムライン（日付列）の横スクロール対応 */
   .gantt-timeline {
     display: flex;
     position: relative;
     flex: 1;
     min-height: 60px;
+    overflow-x: hidden; /* 横スクロールは表示しない（ヘッダーと同期） */
+    width: calc(100% - 250px); /* 機材名部分を除いた幅 */
+    scroll-behavior: smooth; /* スムーズスクロール */
   }
   
   .gantt-timeline-layer {
@@ -973,5 +983,823 @@
     flex: 1;
     overflow-x: auto;
     overflow-y: auto;
+  }
+
+  /* 6. 日付スライダーコンテナのスタイル（新規追加） */
+	.date-slider-container {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+    padding: 5px 10px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  /* 7. スライダー自体のスタイル */
+	#date-slider {
+    flex: 1;
+    margin: 0 10px;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #ddd;
+    outline: none;
+    border-radius: 4px;
+  }
+
+	/* 8. スライダーのつまみ部分 */
+	#date-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #26a69a;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+	#date-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #26a69a;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  /* 9. スライダーラベルのスタイル */
+	.date-slider-label {
+    color: #26a69a;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+  }
+
+  .date-slider-label:hover {
+    background-color: rgba(38, 166, 154, 0.1);
+  }
+
+	/* 10. ガントチャート行のコンテナ修正 */
+	#gantt-rows {
+    overflow-y: auto; /* 縦スクロール対応 */
+    max-height: calc(100% - 40px); /* ヘッダー高さを除いた最大高さ */
+  }
+
+	/* 11. モバイル対応の調整 */
+	@media (max-width: 768px) {
+	  .gantt-container {
+	    height: 70vh; /* モバイルではより大きく */
+	  }
+	  
+	  .date-slider-container {
+	    padding: 10px;
+	  }
+	  
+	  #date-slider {
+	    height: 12px;
+	  }
+	  
+	  #date-slider::-webkit-slider-thumb,
+	  #date-slider::-moz-range-thumb {
+	    width: 24px;
+	    height: 24px;
+	  }
+	  
+	  .date-slider-label {
+	    padding: 8px 15px;
+	    font-size: 16px;
+	  }
+	}
+
+	/* 12. スクロールバーのデザイン改善 */
+	.gantt-dates::-webkit-scrollbar,
+	.gantt-timeline::-webkit-scrollbar,
+	#gantt-rows::-webkit-scrollbar {
+	  height: 8px;
+	  width: 8px;
+	}
+
+	.gantt-dates::-webkit-scrollbar-track,
+	.gantt-timeline::-webkit-scrollbar-track,
+	#gantt-rows::-webkit-scrollbar-track {
+	  background: #f1f1f1;
+	  border-radius: 4px;
+	}
+
+	.gantt-dates::-webkit-scrollbar-thumb,
+	.gantt-timeline::-webkit-scrollbar-thumb,
+	#gantt-rows::-webkit-scrollbar-thumb {
+	  background: #26a69a;
+	  border-radius: 4px;
+	}
+
+	.gantt-dates::-webkit-scrollbar-thumb:hover,
+	.gantt-timeline::-webkit-scrollbar-thumb:hover,
+	#gantt-rows::-webkit-scrollbar-thumb:hover {
+	  background: #1a8c81;
+	}
+
+	/* 13. カレンダーナビゲーションの位置調整 */
+	.calendar-navigation {
+	  display: none; /* スライダーに置き換えるため非表示に */
+	}
+  /* 10. 本日ボタンのスタイル（新規追加） */
+  .date-slider-today {
+    margin-left: 10px;
+    height: 30px;
+    line-height: 30px;
+    padding: 0 10px;
+    background-color: #26a69a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .date-slider-today i {
+    font-size: 18px;
+    margin-right: 5px;
+  }
+
+  .date-slider-today:hover {
+    background-color: #2bbbad;
+  }
+  /* 12. 日付ヘッダーのスクロールバーのみカスタマイズ */
+  #date-headers::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  #date-headers::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  #date-headers::-webkit-scrollbar-thumb {
+    background: #26a69a;
+    border-radius: 4px;
+  }
+
+  #date-headers::-webkit-scrollbar-thumb:hover {
+    background: #1a8c81;
+  }
+  /* 13. 各機器の行のスクロールバーを非表示（ヘッダーと同期するため） */
+  .gantt-timeline::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 14. カレンダーナビゲーションの位置調整 */
+  .calendar-navigation {
+    display: none; /* スライダーに置き換えるため非表示に */
+  }
+
+  /* 15. モバイル対応の調整 */
+  @media (max-width: 768px) {
+    .gantt-container {
+      height: 70vh; /* モバイルではより大きく */
+    }
+    
+    .date-slider-container {
+      padding: 10px;
+      flex-wrap: wrap;
+    }
+    
+    #date-slider {
+      height: 12px;
+      width: 100%;
+      margin: 10px 0;
+      order: 3;
+    }
+    
+    .date-slider-label {
+      padding: 8px 15px;
+      font-size: 16px;
+    }
+    
+    .date-slider-today {
+      height: 36px;
+      margin-left: auto;
+    }
+  }
+  /* PC版文字サイズスライダーの位置を修正 */
+  .font-size-control-pc {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 10px;
+    height: 30px;
+  }
+
+  /* PC版スライダーを「モバイル表示」ボタンの右側に配置 */
+  #toggle-mobile-view + .font-size-control-pc {
+    margin-left: 10px;
+  }
+
+  /* スライダーの入力欄自体のスタイル */
+  #pc-font-size-slider {
+    width: 100px;
+    margin: 0 5px;
+  }
+
+  /* スライダーのラベルを適切に配置 */
+  .font-size-control-pc label {
+    margin-right: 5px;
+    white-space: nowrap;
+  }
+  /* 機器マスター管理モーダルの入力フィールド間隔調整 */
+  #equipment-modal .input-field {
+    margin-top: 5px !important;  /* 上部マージンを縮小 */
+    margin-bottom: 5px !important; /* 下部マージンを縮小 */
+  }
+
+  /* 機器マスター管理モーダルのラベル位置調整 */
+  #equipment-modal .input-field label {
+    top: -8px !important; /* ラベルを上に移動 */
+  }
+
+  /* 機器マスター管理モーダルの入力欄の高さ調整 */
+  #equipment-modal input[type="text"],
+  #equipment-modal input[type="number"] {
+    height: 30px !important; /* 入力欄の高さを縮小 */
+    margin-bottom: 0 !important; /* 下部マージン削除 */
+  }
+
+  /* セレクトボックスの調整 */
+  #equipment-modal select.browser-default {
+    height: 30px !important; /* セレクトボックスの高さを縮小 */
+    margin-bottom: 0 !important; /* 下部マージン削除 */
+  }
+
+  /* 機器マスター管理モーダルの行間隔調整 */
+  #equipment-modal .row .col {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* 入力欄全体の縦幅を調整 */
+  #equipment-modal .modal-content {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  /* 追加ボタンの位置調整 */
+  #equipment-modal #add-equipment-btn {
+    margin-top: 5px !important;
+  }
+  /* 備考1と備考2のフィールドを揃えるスタイル */
+  #equipment-modal .input-field.col.s6 {
+    clear: none !important; /* 浮動要素のクリアを防止 */
+    float: left !important; /* 左寄せを強制 */
+  }
+
+  /* 備考1と備考2を同じ幅にする */
+  #new-equipment-note1,
+  #new-equipment-note2 {
+    width: 100% !important; /* 親要素いっぱいに広げる */
+  }
+
+  /* 行のマージンを適切に制御 */
+  #equipment-modal .row {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 5px !important;
+  }
+
+  /* 備考フィールドの行が適切に改行されるように */
+  #equipment-modal .row:after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+  /* ====================== 
+   Stylesheet.html に追加する修正
+   ====================== */
+
+  /* 1. PC版のレイアウトを維持する備考フィールドの修正 */
+  @media screen and (min-width: 769px) {
+    /* PC版でのみ適用されるスタイル */
+    #equipment-modal .row {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 10px !important;
+    }
+    
+    #equipment-modal .input-field.col.s6 {
+      clear: none !important;
+      float: left !important;
+      padding: 0 5px;
+    }
+    
+    #new-equipment-note1,
+    #new-equipment-note2 {
+      width: 100% !important;
+    }
+  }
+
+  /* 2. モバイル表示の改善 */
+  @media screen and (max-width: 768px) {
+    /* モーダルの調整 */
+    .modal {
+      width: 90% !important;
+      max-height: 80vh !important;
+    }
+    
+    .modal .modal-content {
+      padding: 12px !important;
+    }
+    
+    /* フォームフィールドの調整 */
+    .input-field {
+      margin-top: 15px !important;
+      margin-bottom: 15px !important;
+    }
+    
+    /* モバイルでのラベル位置調整 */
+    .input-field label {
+      font-size: 1rem !important;
+      transform: translateY(-14px) scale(0.8) !important;
+    }
+    
+    /* 入力フィールドのサイズ調整 */
+    input[type="text"],
+    input[type="number"],
+    select.browser-default {
+      height: 36px !important;
+      font-size: 16px !important; /* モバイルでは16px以上が推奨 */
+    }
+    
+    /* スライダーコンテナの調整 */
+    .date-slider-container {
+      padding: 10px 5px;
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    
+    /* スライダー自体の調整 */
+    #date-slider {
+      flex: 1;
+      min-width: 120px;
+      margin: 0 8px;
+      height: 10px;
+    }
+    
+    /* 日付表示部分が固定されるように */
+    .gantt-container {
+      position: relative;
+      height: 60vh !important;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .gantt-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+    
+    #gantt-rows {
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    /* スクロールバーのスタイル改善 */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #26a69a;
+      border-radius: 4px;
+    }
+  }
+
+  /* 3. 文字サイズ変更の修正 */
+  :root {
+    --base-font-size: 12px;
+  }
+
+  body {
+    font-size: var(--base-font-size);
+  }
+
+  /* 一貫した文字サイズクラス */
+  .font-adjusted {
+    transition: font-size 0.3s;
+  }
+
+  /* 4. 縦横切り替え対応 */
+  @media screen and (orientation: portrait) {
+    /* 縦向き表示時のスタイル */
+    .gantt-item {
+      flex: 0 0 40%;
+      min-width: 150px;
+    }
+    
+    .gantt-dates,
+    .gantt-timeline {
+      width: 60%;
+    }
+  }
+
+  @media screen and (orientation: landscape) {
+    /* 横向き表示時のスタイル */
+    .gantt-item {
+      flex: 0 0 30%;
+      min-width: 120px;
+    }
+    
+    .gantt-dates,
+    .gantt-timeline {
+      width: 70%;
+    }
+  }
+
+  /* 5. ガントチャート全体の安定性向上 */
+  .gantt-container {
+    overscroll-behavior: none; /* 過剰なスクロールバウンスを防止 */
+  }
+
+  .gantt-dates {
+    overflow-x: auto;
+    scroll-behavior: smooth;
+  }
+
+  .gantt-day {
+    min-width: 40px !important; /* 最小幅を確保 */
+  }
+
+  /* 6. モバイル向けモーダルの改善 */
+  @media screen and (max-width: 768px) {
+    .modal-footer {
+      padding: 4px 10px !important;
+      height: auto !important;
+    }
+    
+    .modal-footer .btn, 
+    .modal-footer .btn-flat {
+      margin: 4px !important;
+      height: 36px !important;
+      line-height: 36px !important;
+    }
+    
+    /* テキスト重なり防止 */
+    .input-field label.active {
+      font-size: 0.9rem !important;
+      transform: translateY(-18px) scale(0.8) !important;
+    }
+    
+    /* スペース効率化 */
+    .row .col {
+      padding: 0 5px !important;
+    }
+  }
+  /* ====================== 
+   Stylesheet.html に追加するモバイル向け修正
+   ====================== */
+
+/* モバイル専用のスタイル調整 */
+@media screen and (max-width: 768px) {
+  /* 1. 機材貸出登録のフォントサイズ統一 */
+  #rental-modal select.browser-default,
+  #rental-modal .modal-footer .btn,
+  #rental-modal .modal-footer .btn-flat,
+  #rental-modal input[type="text"],
+  #rental-modal input[type="number"],
+  #return-modal select.browser-default,
+  #return-modal .modal-footer .btn,
+  #return-modal .modal-footer .btn-flat,
+  #return-modal input[type="text"] {
+    font-size: 16px !important; /* 「数量」と同じサイズに */
+    height: 40px !important;
+  }
+  
+  /* 2. カレンダー、機材リスト等の文字サイズ統一 */
+  .gantt-item, 
+  .equipment-name, 
+  .equipment-location, 
+  .equipment-stock, 
+  .gantt-date,
+  .settings-panel span,
+  #confirm-dialog-checkbox + span {
+    font-size: 14px !important; /* 「更新時に確認する」と同じサイズに */
+  }
+  
+  /* 3. 貸出バーの文字サイズと表示調整 */
+  .rental-bar {
+    font-size: 14px !important;
+    padding: 8px 40px 8px 8px !important;
+    height: auto !important;
+    min-height: 40px !important;
+    line-height: 1.4 !important;
+  }
+  
+  /* 4. アイコンサイズ倍増 */
+  .btn i.material-icons,
+  .modal-content i.material-icons,
+  .mobile-menu-btn i.material-icons,
+  .return-button i.material-icons {
+    font-size: 36px !important;
+  }
+  
+  /* 5. ボタンサイズ拡大 */
+  .btn, 
+  .btn-flat {
+    height: 48px !important;
+    line-height: 48px !important;
+    padding: 0 16px !important;
+  }
+  
+  /* 6. モーダルのレイアウト改善（スクロール不要に） */
+  .modal {
+    max-height: 90vh !important;
+    height: auto !important;
+    width: 95% !important;
+    top: 5% !important;
+  }
+  
+  .modal .modal-content {
+    padding: 12px !important;
+    max-height: calc(90vh - 60px) !important; /* フッター高さ分を引く */
+    overflow-y: auto;
+  }
+  
+  /* 7. コンパクトな入力フォームレイアウト */
+  .modal .row {
+    margin-bottom: 5px !important;
+  }
+  
+  .modal .input-field {
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+  }
+  
+  .modal .input-field label.active {
+    transform: translateY(-14px) scale(0.8) !important;
+  }
+  
+  /* 8. プロジェクト追加モーダルと機器追加モーダルの調整 */
+  #projects-modal,
+  #equipment-modal {
+    max-width: 95% !important;
+    width: 95% !important;
+    height: auto !important;
+    max-height: 90vh !important;
+  }
+  
+  #projects-modal .modal-content,
+  #equipment-modal .modal-content {
+    padding: 10px !important;
+  }
+  
+  /* 9. モーダル内フォント調整 */
+  #projects-modal h4,
+  #equipment-modal h4 {
+    font-size: 18px !important;
+    margin-top: 5px !important;
+    margin-bottom: 10px !important;
+  }
+  
+  #projects-modal h5,
+  #equipment-modal h5 {
+    font-size: 16px !important;
+    margin-top: 5px !important;
+    margin-bottom: 5px !important;
+  }
+  
+  /* 10. テーブルのフォントサイズ */
+  table.striped th,
+  table.striped td {
+    font-size: 14px !important;
+    padding: 8px 5px !important;
+  }
+  
+  /* 11. スクロールの改善 */
+  .gantt-dates {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important; /* iOSスクロール改善 */
+  }
+}
+
+  /* 日付スライダーの強化 (モバイル専用) */
+  @media screen and (max-width: 768px) {
+    .date-slider-container {
+      background-color: #f5f5f5;
+      padding: 8px 5px;
+      border-radius: 4px;
+      margin: 5px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    #date-slider {
+      flex: 1;
+      margin: 0 8px;
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    
+    #date-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px !important; /* 大きくして操作しやすく */
+      height: 24px !important;
+      border-radius: 50%;
+      background: #26a69a;
+      cursor: pointer;
+      border: 2px solid white;
+    }
+    
+    .date-slider-today {
+      height: 40px !important;
+      line-height: 40px !important;
+    }
+    
+    .date-slider-label {
+      font-size: 16px !important;
+      padding: 8px 12px !important;
+    }
+  }
+  /* モバイル専用のスタイル調整 */
+  @media screen and (max-width: 768px) {
+    /* 1. 機材貸出登録のフォントサイズ統一 */
+    #rental-modal select.browser-default,
+    #rental-modal .modal-footer .btn,
+    #rental-modal .modal-footer .btn-flat,
+    #rental-modal input[type="text"],
+    #rental-modal input[type="number"],
+    #return-modal select.browser-default,
+    #return-modal .modal-footer .btn,
+    #return-modal .modal-footer .btn-flat,
+    #return-modal input[type="text"] {
+      font-size: 16px !important; /* 「数量」と同じサイズに */
+      height: 40px !important;
+    }
+    
+    /* 2. カレンダー、機材リスト等の文字サイズ統一 */
+    .gantt-item, 
+    .equipment-name, 
+    .equipment-location, 
+    .equipment-stock, 
+    .gantt-date,
+    .settings-panel span,
+    #confirm-dialog-checkbox + span {
+      font-size: 14px !important; /* 「更新時に確認する」と同じサイズに */
+    }
+    
+    /* 3. 貸出バーの文字サイズと表示調整 */
+    .rental-bar {
+      font-size: 14px !important;
+      padding: 8px 40px 8px 8px !important;
+      height: auto !important;
+      min-height: 40px !important;
+      line-height: 1.4 !important;
+    }
+    
+    /* 4. アイコンサイズ倍増 */
+    .btn i.material-icons,
+    .modal-content i.material-icons,
+    .mobile-menu-btn i.material-icons,
+    .return-button i.material-icons {
+      font-size: 36px !important;
+    }
+    
+    /* 5. ボタンサイズ拡大 */
+    .btn, 
+    .btn-flat {
+      height: 48px !important;
+      line-height: 48px !important;
+      padding: 0 16px !important;
+    }
+    
+    /* 6. モーダルのレイアウト改善（スクロール不要に） */
+    .modal {
+      max-height: 90vh !important;
+      height: auto !important;
+      width: 95% !important;
+      top: 5% !important;
+    }
+    
+    .modal .modal-content {
+      padding: 12px !important;
+      max-height: calc(90vh - 60px) !important; /* フッター高さ分を引く */
+      overflow-y: auto;
+    }
+    
+    /* 7. コンパクトな入力フォームレイアウト */
+    .modal .row {
+      margin-bottom: 5px !important;
+    }
+    
+    .modal .input-field {
+      margin-top: 10px !important;
+      margin-bottom: 10px !important;
+    }
+    
+    .modal .input-field label.active {
+      transform: translateY(-14px) scale(0.8) !important;
+    }
+    
+    /* 8. プロジェクト追加モーダルと機器追加モーダルの調整 */
+    #projects-modal,
+    #equipment-modal {
+      max-width: 95% !important;
+      width: 95% !important;
+      height: auto !important;
+      max-height: 90vh !important;
+    }
+    
+    #projects-modal .modal-content,
+    #equipment-modal .modal-content {
+      padding: 10px !important;
+    }
+    
+    /* 9. モーダル内フォント調整 */
+    #projects-modal h4,
+    #equipment-modal h4 {
+      font-size: 18px !important;
+      margin-top: 5px !important;
+      margin-bottom: 10px !important;
+    }
+    
+    #projects-modal h5,
+    #equipment-modal h5 {
+      font-size: 16px !important;
+      margin-top: 5px !important;
+      margin-bottom: 5px !important;
+    }
+    
+    /* 10. テーブルのフォントサイズ */
+    table.striped th,
+    table.striped td {
+      font-size: 14px !important;
+      padding: 8px 5px !important;
+    }
+    
+    /* 11. スクロールの改善 */
+    .gantt-dates {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch !important; /* iOSスクロール改善 */
+    }
+  }
+
+  /* 日付スライダーの強化 (モバイル専用) */
+  @media screen and (max-width: 768px) {
+    .date-slider-container {
+      background-color: #f5f5f5;
+      padding: 8px 5px;
+      border-radius: 4px;
+      margin: 5px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    #date-slider {
+      flex: 1;
+      margin: 0 8px;
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    
+    #date-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 24px !important; /* 大きくして操作しやすく */
+      height: 24px !important;
+      border-radius: 50%;
+      background: #26a69a;
+      cursor: pointer;
+      border: 2px solid white;
+    }
+    
+    .date-slider-today {
+      height: 40px !important;
+      line-height: 40px !important;
+    }
+    
+    .date-slider-label {
+      font-size: 16px !important;
+      padding: 8px 12px !important;
+    }
   }
 </style>
