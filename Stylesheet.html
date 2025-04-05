@@ -3265,4 +3265,436 @@ function createRentalBarWithProperPosition(timeline, rental, startIdx, endIdx, l
 body.swiping * {
   user-select: none !important; /* テキスト選択防止 */
 }
+/* モバイル表示のスタイル修正 - カレンダー左右スワイプ改善 */
+/* 機材名カラム固定強化と左右移動防止 */
+@media screen and (max-width: 768px) {
+  /* 機材名カラムを完全に固定 */
+  .gantt-item {
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 20 !important;
+    background-color: #fff !important;
+    border-right: 2px solid #26a69a !important; /* 境界線を強調 */
+    box-shadow: 3px 0 5px rgba(0, 0, 0, 0.2) !important;
+    will-change: transform !important; /* パフォーマンス最適化 */
+    transform: translateZ(0) !important; /* ハードウェアアクセラレーション */
+    backface-visibility: hidden !important;
+    perspective: 1000px !important;
+  }
+  
+  /* ヘッダーの機材名カラムも同様に */
+  .gantt-header .gantt-item {
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 30 !important;
+    background-color: #f5f5f5 !important;
+    border-right: 2px solid #26a69a !important;
+    box-shadow: 3px 0 5px rgba(0, 0, 0, 0.2) !important;
+    will-change: transform !important;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+    perspective: 1000px !important;
+  }
+  
+  /* スワイプ中の機材名カラムは特に固定 */
+  body.swiping .gantt-item {
+    transform: none !important;
+    transition: none !important;
+    pointer-events: none;
+  }
+  
+  /* 機材名カラムのサイズ固定 */
+  .gantt-item {
+    flex: 0 0 250px !important;
+    min-width: 250px !important;
+    width: 250px !important;
+    max-width: 250px !important;
+  }
+  
+  /* 日付部分のコンテナをより安定化 */
+  .gantt-dates,
+  .gantt-timeline {
+    position: relative !important;
+    will-change: scroll-position !important;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+  }
+  
+  /* 日付列のサイズ固定 */
+  .gantt-date,
+  .gantt-day {
+    flex: 0 0 80px !important;
+    min-width: 80px !important;
+    width: 80px !important;
+    box-sizing: border-box !important;
+    height: 100% !important;
+  }
+  
+  /* 行全体の構造安定化 */
+  .gantt-row {
+    display: flex !important;
+    width: fit-content !important;
+    min-width: 100% !important;
+    overflow: visible !important;
+    position: relative !important;
+  }
+  
+  /* スクロール同期コンテナの安定化 */
+  #gantt-rows {
+    width: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+  }
+  
+  /* 全体のガントチャートレイアウト */
+  .gantt-container {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    position: relative !important;
+    max-width: 100vw !important;
+    overscroll-behavior: none !important; /* オーバースクロール防止 */
+  }
+  
+  /* ヘッダー行は常に画面上部に固定 */
+  .gantt-header {
+    display: flex !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    border-bottom: 2px solid #26a69a !important;
+    background-color: #f5f5f5 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    width: 100% !important;
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 30 !important;
+  }
+  
+  /* 日付ヘッダー部分 */
+  .gantt-dates {
+    display: flex !important;
+    flex: 1 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    width: auto !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+  
+  /* 各日付セル */
+  .gantt-date {
+    flex: 0 0 80px !important;
+    min-width: 80px !important;
+    width: 80px !important;
+    height: 50px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-right: 1px solid #e0e0e0 !important;
+    font-weight: bold !important;
+    font-size: 16px !important;
+  }
+  
+  /* 行コンテナ - スクロール領域 */
+  #gantt-rows {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: calc(65vh - 50px) !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* 各行の外観 */
+  .gantt-row {
+    display: flex !important;
+    min-height: 60px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* タイムライン - 日付セル部分 */
+  .gantt-timeline {
+    display: flex !important;
+    flex: 1 !important;
+    position: relative !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+    min-height: 60px !important;
+  }
+  
+  /* 各日付マス */
+  .gantt-day {
+    flex: 0 0 80px !important;
+    min-width: 80px !important;
+    width: 80px !important;
+    height: 100% !important;
+    border-right: 1px solid #e0e0e0 !important;
+    display: block !important;
+    position: relative !important;
+  }
+  
+  /* 貸出バーのスタイル */
+  .rental-bar {
+    position: absolute !important;
+    height: 40px !important;
+    z-index: 15 !important;
+    font-size: 16px !important;
+    padding: 5px 30px 5px 5px !important;
+    border-radius: 3px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  
+  /* 選択行の背景色 */
+  .selected-equipment .gantt-item {
+    background-color: #e3f2fd !important;
+  }
+  
+  /* 偶数行の背景色 */
+  .gantt-row:nth-child(even) .gantt-item {
+    background-color: #f8f8f8 !important;
+  }
+  
+  /* 奇数行の背景色 */
+  .gantt-row:nth-child(odd) .gantt-item {
+    background-color: #fff !important;
+  }
+  
+  /* 日付とタイムラインのスクロールバー共通スタイル */
+  .gantt-dates::-webkit-scrollbar,
+  .gantt-timeline::-webkit-scrollbar {
+    height: 5px !important;
+    background-color: #f5f5f5 !important;
+  }
+  
+  .gantt-dates::-webkit-scrollbar-thumb,
+  .gantt-timeline::-webkit-scrollbar-thumb {
+    background-color: #26a69a !important;
+    border-radius: 3px !important;
+  }
+  
+  /* スクロールバー表示をカスタマイズ */
+  .gantt-dates,
+  .gantt-timeline {
+    scrollbar-width: thin !important;
+    scrollbar-color: #26a69a #f5f5f5 !important;
+  }
+  
+  /* スワイプ中のスタイル */
+  body.swiping .gantt-item.swipe-fixed {
+    pointer-events: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  
+  /* スワイプ中のカーソルスタイル */
+  body.swiping .gantt-dates,
+  body.swiping .gantt-timeline {
+    cursor: grabbing !important;
+  }
+  
+  /* ハイライトスタイル */
+  .touch-selection {
+    background-color: rgba(38, 166, 154, 0.3) !important;
+  }
+  
+  /* タップ操作の対象エリア拡大 */
+  .gantt-date,
+  .gantt-day,
+  .rental-bar,
+  .return-button {
+    touch-action: manipulation !important;
+    min-height: 44px !important; /* タップエリア確保 */
+  }
+  
+  /* パフォーマンス向上のための設定 */
+  .gantt-container,
+  .gantt-dates,
+  .gantt-timeline,
+  .rental-bar {
+    will-change: transform !important;
+  }
+
+  /* スクロールバー非表示（iOS向け） */
+  .gantt-dates::-webkit-scrollbar,
+  .gantt-timeline::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  /* 返却ボタン配置 */
+  .return-button {
+    position: absolute !important;
+    right: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  
+  .return-button i.material-icons {
+    font-size: 18px !important;
+    line-height: 30px !important;
+  }
+}
+
+/* PCおよびモバイル共通スタイル - スクロール連携の改善 */
+.gantt-header {
+  z-index: 30 !important; /* ヘッダーを常に最前面 */
+}
+
+.gantt-item {
+  z-index: 20 !important; /* 機材名を常に次前面 */
+}
+
+.rental-bar {
+  z-index: 15 !important; /* 貸出バーは機材名より後ろ */
+}
+
+/* スクロール関連の挙動改善 */
+.gantt-container {
+  overscroll-behavior: none !important; /* オーバースクロールをブロック */
+}
+
+/* スワイプ中フラグスタイル */
+body.swiping * {
+  user-select: none !important; /* テキスト選択防止 */
+}
+
+/* 日付スライダーのスタイル改善 */
+.date-slider-container {
+  display: flex !important;
+  align-items: center !important;
+  margin: 5px 0 !important;
+  padding: 5px 10px !important;
+  background-color: #f5f5f5 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+}
+
+#date-slider {
+  flex: 1 !important;
+  margin: 0 10px !important;
+  height: 8px !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background: #ddd !important;
+  outline: none !important;
+  border-radius: 4px !important;
+}
+
+#date-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: #26a69a !important;
+  cursor: pointer !important;
+  border: 2px solid white !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+
+#date-slider::-moz-range-thumb {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: #26a69a !important;
+  cursor: pointer !important;
+  border: 2px solid white !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+
+.date-slider-label {
+  color: #26a69a !important;
+  font-weight: bold !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  padding: 5px 10px !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s !important;
+  white-space: nowrap !important;
+}
+
+.date-slider-label:hover {
+  background-color: rgba(38, 166, 154, 0.1) !important;
+}
+
+.date-slider-today {
+  margin-left: 10px !important;
+  height: 30px !important;
+  line-height: 30px !important;
+  padding: 0 10px !important;
+  background-color: #26a69a !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+.date-slider-today i {
+  font-size: 18px !important;
+  margin-right: 5px !important;
+}
+
+.date-slider-today:hover {
+  background-color: #2bbbad !important;
+}
+
+/* モバイル向け日付スライダー改善 */
+@media screen and (max-width: 768px) {
+  .date-slider-container {
+    padding: 10px !important;
+  }
+  
+  #date-slider {
+    height: 12px !important;
+  }
+  
+  #date-slider::-webkit-slider-thumb,
+  #date-slider::-moz-range-thumb {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  
+  .date-slider-label {
+    padding: 8px 15px !important;
+    font-size: 16px !important;
+  }
+  
+  .date-slider-today {
+    height: 36px !important;
+    font-size: 16px !important;
+  }
+  
+  .date-slider-today i {
+    font-size: 24px !important;
+  }
+}
 </style>
