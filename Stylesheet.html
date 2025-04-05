@@ -3895,5 +3895,160 @@ body.swiping * {
 .gantt-timeline {
   scroll-behavior: smooth !important;
 }
+/* モバイル表示のガントチャートレイアウト修正 */
+@media screen and (max-width: 768px) {
+  /* 機材名カラムのスタイル強化 - 最重要修正 */
+  .gantt-item {
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 20 !important;
+    background-color: #fff !important;
+    border-right: 2px solid #26a69a !important; /* 境界線を強調 */
+    box-shadow: 3px 0 5px rgba(0, 0, 0, 0.2) !important;
+    flex: 0 0 250px !important;
+    min-width: 250px !important;
+    width: 250px !important;
+    max-width: 250px !important;
+    transform: none !important; /* 変形をさせない */
+  }
+  
+  /* ヘッダーの機材名カラムを特に強化 */
+  .gantt-header .gantt-item {
+    position: -webkit-sticky !important;
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 31 !important;
+    background-color: #f5f5f5 !important;
+    border-right: 2px solid #26a69a !important;
+    box-shadow: 3px 0 5px rgba(0, 0, 0, 0.2) !important;
+  }
+  
+  /* スワイプ中は機材名カラムを完全固定 */
+  body.swiping .gantt-item.swipe-fixed {
+    transform: none !important;
+    transition: none !important;
+    pointer-events: none !important;
+  }
+  
+  /* 日付ヘッダーとタイムラインのスクロール設定 */
+  .gantt-dates,
+  .gantt-timeline {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 !important;
+    width: calc(100% - 250px) !important; /* 機材名カラムの幅を除く */
+  }
+  
+  /* 日付列とセルのサイズ統一 */
+  .gantt-date,
+  .gantt-day {
+    flex: 0 0 80px !important;
+    min-width: 80px !important;
+    width: 80px !important;
+    height: 100% !important;
+    border-right: 1px solid #e0e0e0 !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* 行の高さと構造調整 */
+  .gantt-row {
+    display: flex !important;
+    min-height: 60px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* 貸出バーの位置とスタイル調整 */
+  .rental-bar {
+    position: absolute !important;
+    height: 40px !important;
+    z-index: 15 !important; /* 機材名カラムより低い値 */
+    font-size: 16px !important;
+    padding: 8px 40px 8px 8px !important;
+    border-radius: 3px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+}
 
+/* PC・モバイル共通のz-index設定 */
+.gantt-header {
+  z-index: 30 !important;
+}
+
+.gantt-item {
+  z-index: 20 !important;
+}
+
+.rental-bar {
+  z-index: 15 !important;
+}
+
+/* スクロール関連の共通設定 */
+.gantt-container {
+  overscroll-behavior: none !important;
+}
+
+/* スワイプ中のスタイル */
+body.swiping * {
+  user-select: none !important;
+}
+/* モバイル表示のガントチャートレイアウト修正 */
+@media screen and (max-width: 768px) {
+  /* 機材名カラムを完全に固定（絶対位置指定） */
+  .gantt-item {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 250px !important;
+    height: 100% !important;
+    z-index: 25 !important;
+    background-color: #fff !important;
+    border-right: 2px solid #26a69a !important;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2) !important;
+  }
+  
+  /* ヘッダーの機材名カラムも絶対位置で固定 */
+  .gantt-header .gantt-item {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    z-index: 35 !important;
+    background-color: #f5f5f5 !important;
+  }
+  
+  /* 行の構造調整 - 機材名のスペースを確保 */
+  .gantt-row {
+    position: relative !important;
+    padding-left: 250px !important; /* 機材名の幅分のパディング */
+    min-height: 60px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+    width: 100% !important;
+  }
+  
+  /* 日付ヘッダーとタイムラインのコンテナ */
+  .gantt-dates,
+  .gantt-timeline {
+    margin-left: 0 !important; /* パディングで調整済みなのでマージン不要 */
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+  }
+  
+  /* スクロールバーの非表示 */
+  .gantt-dates::-webkit-scrollbar,
+  .gantt-timeline::-webkit-scrollbar {
+    display: none !important;
+  }
+}
 </style>

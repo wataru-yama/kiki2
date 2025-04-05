@@ -991,53 +991,137 @@ function adjustGanttHeight() {
     }, 800); // 遅延時間を長めに設定（800ms）
   }
   
-  // createMobileLayout関数の修正
+  // 改良版のモバイルレイアウト作成関数
 function createMobileLayout(days) {
+  console.log('改良版モバイルレイアウト作成開始');
+  
+  // 日付範囲を半年（180日）に拡張
+  let extendedDays = [];
+  const startDate = new Date(days[0]);
+  for (let i = 0; i < 180; i++) {
+    const newDate = new Date(startDate);
+    newDate.setDate(startDate.getDate() + i);
+    extendedDays.push(newDate);
+  }
+  days = extendedDays;
+  
   // ガントチャートコンテナを取得
   const ganttContainer = document.querySelector('.gantt-container');
   if (!ganttContainer) return;
   
   // コンテナをクリア
   ganttContainer.innerHTML = '';
+  ganttContainer.style.display = 'flex';
+  ganttContainer.style.flexDirection = 'column';
+  ganttContainer.style.height = '100%';
+  ganttContainer.style.overflow = 'hidden';
   
   // 日付表示エリアを追加
   const dateDisplay = document.createElement('div');
   dateDisplay.className = 'date-display-area';
   dateDisplay.textContent = `${formatDate(days[0])} 〜 ${formatDate(days[days.length - 1])}`;
+  dateDisplay.style.flex = '0 0 auto';
   ganttContainer.appendChild(dateDisplay);
   
-  // ヘッダー行の作成
-  const headerRow = document.createElement('div');
-  headerRow.className = 'gantt-row gantt-header';
+  // 本日ボタンを追加
+  const todayButton = document.createElement('button');
+  todayButton.className = 'btn waves-effect waves-light';
+  todayButton.id = 'mobile-view-today';
+  todayButton.innerHTML = '<i class="material-icons left">today</i>本日';
+  todayButton.style.margin = '5px 0';
+  todayButton.style.width = '100%';
+  todayButton.style.flex = '0 0 auto';
+  ganttContainer.appendChild(todayButton);
   
-  // 機材名ヘッダー
-  const headerItem = document.createElement('div');
-  headerItem.className = 'gantt-item';
-  headerItem.textContent = '機材名';
-  headerItem.style.zIndex = '31'; // 最前面に固定
-  headerRow.appendChild(headerItem);
+  // テーブルコンテナ作成 - 固定高さで内部スクロール
+  const tableContainer = document.createElement('div');
+  tableContainer.className = 'mobile-table-container';
+  tableContainer.style.position = 'relative';
+  tableContainer.style.flex = '1 1 auto';
+  tableContainer.style.overflow = 'hidden';
+  tableContainer.style.display = 'flex';
+  tableContainer.style.flexDirection = 'column';
+  ganttContainer.appendChild(tableContainer);
   
-  // 日付ヘッダー（スクロール可能部分）
-  const dateHeaders = document.createElement('div');
-  dateHeaders.className = 'gantt-dates';
-  dateHeaders.id = 'date-headers';
+  // ヘッダー部分（固定表示）
+  const headerContainer = document.createElement('div');
+  headerContainer.style.flex = '0 0 auto';
+  headerContainer.style.position = 'relative';
+  headerContainer.style.zIndex = '20';
+  headerContainer.style.backgroundColor = '#f5f5f5';
+  headerContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+  headerContainer.style.display = 'flex';
+  tableContainer.appendChild(headerContainer);
   
-  // 日付ヘッダーに日付を追加
+  // 機材名ヘッダー（固定）
+  const equipmentHeader = document.createElement('div');
+  equipmentHeader.textContent = '機材名';
+  equipmentHeader.style.flex = '0 0 200px';
+  equipmentHeader.style.minWidth = '200px';
+  equipmentHeader.style.padding = '10px';
+  equipmentHeader.style.fontWeight = 'bold';
+  equipmentHeader.style.borderRight = '2px solid #26a69a';
+  equipmentHeader.style.borderBottom = '1px solid #e0e0e0';
+  equipmentHeader.style.backgroundColor = '#f5f5f5';
+  equipmentHeader.style.zIndex = '30';
+  headerContainer.appendChild(equipmentHeader);
+  
+  // 日付ヘッダーコンテナ（横スクロール可能）
+  const dateHeaderContainer = document.createElement('div');
+  dateHeaderContainer.id = 'date-headers';
+  dateHeaderContainer.style.flex = '1 1 auto';
+  dateHeaderContainer.style.display = 'flex';
+  dateHeaderContainer.style.overflowX = 'auto';
+  dateHeaderContainer.style.overflowY = 'hidden';
+  dateHeaderContainer.style.scrollBehavior = 'smooth';
+  dateHeaderContainer.style.WebkitOverflowScrolling = 'touch';
+  headerContainer.appendChild(dateHeaderContainer);
+  
+  // 日付ヘッダーを追加
   days.forEach(day => {
-    const header = document.createElement('div');
-    header.className = 'gantt-date';
-    header.textContent = formatDate(day, 'MM/dd');
-    dateHeaders.appendChild(header);
+    const dateHeader = document.createElement('div');
+    dateHeader.className = 'date-header';
+    dateHeader.textContent = formatDate(day, 'MM/dd');
+    dateHeader.style.flex = '0 0 80px';
+    dateHeader.style.minWidth = '80px';
+    dateHeader.style.padding = '10px 5px';
+    dateHeader.style.textAlign = 'center';
+    dateHeader.style.fontWeight = 'bold';
+    dateHeader.style.borderRight = '1px solid #e0e0e0';
+    dateHeader.style.borderBottom = '1px solid #e0e0e0';
+    dateHeaderContainer.appendChild(dateHeader);
   });
   
-  // 日付ヘッダーをヘッダー行に追加
-  headerRow.appendChild(dateHeaders);
-  ganttContainer.appendChild(headerRow);
+  // コンテンツエリア（縦スクロール可能）
+  const contentContainer = document.createElement('div');
+  contentContainer.style.flex = '1 1 auto';
+  contentContainer.style.position = 'relative';
+  contentContainer.style.display = 'flex';
+  contentContainer.style.overflow = 'hidden';
+  tableContainer.appendChild(contentContainer);
   
-  // 行コンテナ作成
-  const rowsContainer = document.createElement('div');
-  rowsContainer.id = 'gantt-rows';
-  ganttContainer.appendChild(rowsContainer);
+  // 機材名カラム（固定）
+  const equipmentColumn = document.createElement('div');
+  equipmentColumn.style.flex = '0 0 200px';
+  equipmentColumn.style.minWidth = '200px';
+  equipmentColumn.style.overflowY = 'auto';
+  equipmentColumn.style.overflowX = 'hidden';
+  equipmentColumn.style.backgroundColor = '#fff';
+  equipmentColumn.style.borderRight = '2px solid #26a69a';
+  equipmentColumn.style.zIndex = '10';
+  equipmentColumn.style.position = 'relative';
+  contentContainer.appendChild(equipmentColumn);
+  
+  // タイムラインエリア（縦横スクロール可能）
+  const timelineArea = document.createElement('div');
+  timelineArea.id = 'gantt-timeline-area';
+  timelineArea.style.flex = '1 1 auto';
+  timelineArea.style.position = 'relative';
+  timelineArea.style.overflowY = 'auto';
+  timelineArea.style.overflowX = 'auto';
+  timelineArea.style.scrollBehavior = 'smooth';
+  timelineArea.style.WebkitOverflowScrolling = 'touch';
+  contentContainer.appendChild(timelineArea);
   
   // 選択中の機器+定置場所の情報を取得
   let selectedPlaceInfo = null;
@@ -1065,101 +1149,115 @@ function createMobileLayout(days) {
   
   // 表示対象が存在しない場合
   if (displayEquipment.length === 0) {
-    const emptyRow = document.createElement('div');
-    emptyRow.className = 'gantt-row';
-    emptyRow.style.height = '100px';
-    
     const emptyMessage = document.createElement('div');
-    emptyMessage.className = 'gantt-item center-align';
-    emptyMessage.style.width = '100%';
     emptyMessage.style.padding = '20px';
+    emptyMessage.style.textAlign = 'center';
     emptyMessage.style.color = '#666';
     emptyMessage.textContent = '表示する機材がありません。機材マスターから機材を追加してください。';
-    
-    emptyRow.appendChild(emptyMessage);
-    rowsContainer.appendChild(emptyRow);
+    timelineArea.appendChild(emptyMessage);
     return;
   }
   
+  // タイムラインコンテンツ（実際の行データを含む）
+  const timelineContent = document.createElement('div');
+  timelineContent.style.position = 'relative';
+  timelineContent.style.minHeight = '100%';
+  timelineContent.style.width = `${days.length * 80}px`; // 日数×80px
+  timelineArea.appendChild(timelineContent);
+  
   // 各機材の行を作成
-  displayEquipment.forEach(item => {
+  displayEquipment.forEach((item, index) => {
     if (!item['機器管理番号']) return;
     
     const equipmentId = item['機器管理番号'];
     const location = item['定置場所'] || '';
-    
-    // 行作成
-    const row = document.createElement('div');
-    row.className = 'gantt-row';
-    row.dataset.equipmentId = equipmentId;
-    row.dataset.location = location;
     
     // 現在選択中の機器+定置場所かどうかチェック
     const isSelected = selectedPlaceInfo && 
                     String(equipmentId) === String(selectedPlaceInfo.id) && 
                     String(location) === String(selectedPlaceInfo.location);
     
-    if (isSelected) {
-      row.classList.add('selected-equipment');
-    }
+    const rowHeight = 80; // 行の高さ
     
-    // 機材名セル
-    const nameCell = document.createElement('div');
-    nameCell.className = 'gantt-item';
-    nameCell.dataset.equipmentId = equipmentId;
-    nameCell.dataset.location = location;
+    // 機材名セル作成
+    const equipmentCell = document.createElement('div');
+    equipmentCell.style.height = `${rowHeight}px`;
+    equipmentCell.style.borderBottom = '1px solid #e0e0e0';
+    equipmentCell.style.padding = '10px';
+    equipmentCell.style.boxSizing = 'border-box';
+    equipmentCell.style.backgroundColor = isSelected ? '#e3f2fd' : (index % 2 === 0 ? '#fff' : '#f9f9f9');
+    equipmentColumn.appendChild(equipmentCell);
     
-    if (isSelected) {
-      nameCell.style.backgroundColor = '#e3f2fd';
-    }
-
+    // 機材情報コンテナ
     const infoContainer = document.createElement('div');
-    infoContainer.className = 'equipment-info';
-
+    infoContainer.style.display = 'flex';
+    infoContainer.style.flexDirection = 'column';
+    equipmentCell.appendChild(infoContainer);
+    
     // 機材名と機器管理番号
     const nameDiv = document.createElement('div');
-    nameDiv.className = 'equipment-name';
+    nameDiv.style.fontWeight = 'bold';
+    nameDiv.style.marginBottom = '5px';
     nameDiv.textContent = `${item['機器名称']} (${equipmentId})`;
     infoContainer.appendChild(nameDiv);
     
     // 定置場所
     if (item['定置場所']) {
       const locationDiv = document.createElement('div');
-      locationDiv.className = 'equipment-location';
+      locationDiv.style.fontSize = '14px';
+      locationDiv.style.marginBottom = '5px';
       locationDiv.textContent = `${item['定置場所']}`;
       infoContainer.appendChild(locationDiv);
     }
     
     // 在庫台数
     const stockDiv = document.createElement('div');
-    stockDiv.className = 'equipment-stock';
+    stockDiv.style.fontSize = '14px';
+    stockDiv.style.fontWeight = 'bold';
+    stockDiv.style.color = '#26a69a';
     stockDiv.textContent = `在庫台数: ${item['総台数'] || 0}台`;
     infoContainer.appendChild(stockDiv);
     
-    nameCell.appendChild(infoContainer);
-    row.appendChild(nameCell);
+    // タイムライン行を作成
+    const timelineRow = document.createElement('div');
+    timelineRow.style.position = 'absolute';
+    timelineRow.style.left = '0';
+    timelineRow.style.top = `${index * rowHeight}px`;
+    timelineRow.style.width = '100%';
+    timelineRow.style.height = `${rowHeight}px`;
+    timelineRow.style.backgroundColor = isSelected ? '#e3f2fd' : (index % 2 === 0 ? '#fff' : '#f9f9f9');
+    timelineRow.style.borderBottom = '1px solid #e0e0e0';
+    timelineContent.appendChild(timelineRow);
     
-    // タイムライン作成 - 重要な修正
-    const timeline = document.createElement('div');
-    timeline.className = 'gantt-timeline';
-    timeline.dataset.equipment = equipmentId;
-    timeline.dataset.location = location;
-    
-    // マウスダウンイベント設定
-    timeline.addEventListener('mousedown', onTimelineMouseDown);
-    timeline.addEventListener('touchstart', function(e) {
-      // タッチイベントを通過させる（スワイプ処理用）
-    }, { passive: true });
-    
-    // 日付セル作成
-    days.forEach((day, index) => {
-      const dayCell = document.createElement('div');
-      dayCell.className = 'gantt-day';
-      dayCell.dataset.date = formatDate(day);
-      dayCell.dataset.equipment = equipmentId;
-      dayCell.dataset.location = location;
-      dayCell.dataset.index = index;
-      timeline.appendChild(dayCell);
+    // グリッド線を描画
+    days.forEach((day, dayIndex) => {
+      const gridLine = document.createElement('div');
+      gridLine.style.position = 'absolute';
+      gridLine.style.left = `${dayIndex * 80}px`;
+      gridLine.style.top = '0';
+      gridLine.style.width = '1px';
+      gridLine.style.height = '100%';
+      gridLine.style.backgroundColor = '#e0e0e0';
+      timelineRow.appendChild(gridLine);
+      
+      // 日付セルクリックイベント - 貸出モーダル表示
+      const dateCell = document.createElement('div');
+      dateCell.style.position = 'absolute';
+      dateCell.style.left = `${dayIndex * 80}px`;
+      dateCell.style.top = '0';
+      dateCell.style.width = '80px';
+      dateCell.style.height = '100%';
+      
+      // 日付セルをクリックした時のイベント - 貸出モーダル表示
+      dateCell.addEventListener('click', function() {
+        if (isSwiping) return; // スワイプ中は無視
+        
+        // 貸出モーダル表示
+        const dateStr = formatDate(day);
+        showRentalModal(equipmentId, dateStr, dateStr, location);
+      });
+      
+      timelineRow.appendChild(dateCell);
     });
     
     // 機器と定置場所が一致する貸出だけを表示
@@ -1179,207 +1277,254 @@ function createMobileLayout(days) {
       return equipMatch && locationMatch && isActive;
     });
     
-    // 貸出が複数ある場合に重ならないように処理する
-    if (myRentals.length > 0) {
-      // 貸出を日付範囲に変換
-      const rentalRanges = myRentals.map(rental => {
-        let startDay = parseDate(rental['借用開始日']);
-        let endDay = parseDate(rental['借用終了日']);
-        
-        if (!startDay || !endDay) return null;
-        
-        startDay.setHours(0, 0, 0, 0);
-        endDay.setHours(0, 0, 0, 0);
-        
-        return {
-          rental: rental,
-          startDay: startDay,
-          endDay: endDay,
-          layer: null
-        };
-      }).filter(range => range !== null);
+    // 貸出バーを作成（連続した一本のバーとして表示）
+    myRentals.forEach((rental, rentalIndex) => {
+      const startDay = parseDate(rental['借用開始日']);
+      const endDay = parseDate(rental['借用終了日']);
       
-      // 表示範囲を考慮
-      const rangeStart = new Date(days[0]);
-      const rangeEnd = new Date(days[days.length - 1]);
-      rangeStart.setHours(0, 0, 0, 0);
-      rangeEnd.setHours(23, 59, 59, 999);
+      if (!startDay || !endDay) return;
       
-      // 貸出を日付順にソート
-      rentalRanges.sort((a, b) => a.startDay.getTime() - b.startDay.getTime());
+      // 表示範囲内かチェック
+      const firstDay = new Date(days[0]);
+      const lastDay = new Date(days[days.length - 1]);
       
-      // 各貸出に表示レイヤーを割り当て
-      const layers = [];
+      // 範囲外なら表示しない
+      if (endDay < firstDay || startDay > lastDay) return;
       
-      // 各貸出に対してレイヤーを割り当てる
-      rentalRanges.forEach(rentalRange => {
-        let assignedLayer = false;
+      // 表示範囲内の開始日と終了日を計算
+      const visibleStartDay = startDay < firstDay ? firstDay : startDay;
+      const visibleEndDay = endDay > lastDay ? lastDay : endDay;
+      
+      // 開始位置と幅を計算
+      let startIndex = 0;
+      let endIndex = days.length - 1;
+      
+      for (let i = 0; i < days.length; i++) {
+        const currentDay = new Date(days[i]);
+        currentDay.setHours(0, 0, 0, 0);
         
-        for (let i = 0; i < layers.length; i++) {
-          let hasConflict = false;
-          
-          for (const existingRange of layers[i]) {
-            if (!(rentalRange.endDay < existingRange.startDay || 
-                 rentalRange.startDay > existingRange.endDay)) {
-              hasConflict = true;
-              break;
-            }
-          }
-          
-          if (!hasConflict) {
-            layers[i].push(rentalRange);
-            rentalRange.layer = i;
-            assignedLayer = true;
-            break;
-          }
+        if (visibleStartDay.getTime() <= currentDay.getTime() && startIndex === 0) {
+          startIndex = i;
         }
         
-        if (!assignedLayer) {
-          layers.push([rentalRange]);
-          rentalRange.layer = layers.length - 1;
+        if (visibleEndDay.getTime() >= currentDay.getTime()) {
+          endIndex = i;
         }
+      }
+      
+      const barLeft = startIndex * 80;
+      const barWidth = (endIndex - startIndex + 1) * 80;
+      
+      // 貸出バーを作成
+      const rentalBar = document.createElement('div');
+      rentalBar.style.position = 'absolute';
+      rentalBar.style.left = `${barLeft}px`;
+      rentalBar.style.top = `${rentalIndex * 20 + 10}px`; // 複数の貸出がある場合は位置をずらす
+      rentalBar.style.width = `${barWidth}px`;
+      rentalBar.style.height = '20px';
+      rentalBar.style.backgroundColor = location === rental['使用場所'] ? '#26a69a' : '#ff9800';
+      rentalBar.style.borderRadius = '3px';
+      rentalBar.style.color = 'white';
+      rentalBar.style.fontSize = '14px';
+      rentalBar.style.padding = '0 5px';
+      rentalBar.style.lineHeight = '20px';
+      rentalBar.style.overflow = 'hidden';
+      rentalBar.style.textOverflow = 'ellipsis';
+      rentalBar.style.whiteSpace = 'nowrap';
+      rentalBar.style.zIndex = '5';
+      rentalBar.style.cursor = 'pointer';
+      rentalBar.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
+      rentalBar.textContent = `${rental['数量']}台-${rental['使用場所']}(${getUserDisplayName(rental['借用者'])})`;
+      
+      // クリックイベント - 返却モーダル表示
+      rentalBar.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showReturnModal(rental);
       });
       
-      // レイヤー数に基づいて行の高さを調整（最低2つのレイヤーを確保）
-      const layerCount = Math.max(2, layers.length);
-      row.style.height = (layerCount * 40 + 20) + 'px';
-      timeline.style.height = (layerCount * 40 + 20) + 'px';
-      
-      // セル幅を取得（常に80pxに固定）
-      const cellWidth = 80;
-      
-      // 各貸出バーを作成
-      rentalRanges.forEach(rentalRange => {
-        try {
-          const rental = rentalRange.rental;
-          const startDay = rentalRange.startDay;
-          const endDay = rentalRange.endDay;
-          const layer = rentalRange.layer;
-          
-          // 範囲外なら表示しない
-          if (endDay < rangeStart || startDay > rangeEnd) return;
-          
-          // バーの日付範囲
-          let visibleStartDay = startDay < rangeStart ? rangeStart : startDay;
-          let visibleEndDay = endDay > rangeEnd ? rangeEnd : endDay;
-          
-          // インデックスを計算
-          let startIdx = -1;
-          let endIdx = -1;
-          
-          for (let i = 0; i < days.length; i++) {
-            const currentDay = new Date(days[i]);
-            currentDay.setHours(0, 0, 0, 0);
-            
-            if (startIdx === -1 && visibleStartDay.getTime() <= currentDay.getTime()) {
-              startIdx = i;
-            }
-            
-            if (visibleEndDay.getTime() >= currentDay.getTime()) {
-              endIdx = i;
-            }
-          }
-          
-          // インデックスチェック
-          if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
-          
-          // バー作成（createRentalBarWithProperPosition関数の代わり）
-          const width = ((endIdx - startIdx) + 1) * cellWidth;
-          const left = startIdx * cellWidth;
-          const top = layer * 40 + 10; // 10pxの余白を追加
-          
-          // バー要素作成
-          const bar = document.createElement('div');
-          bar.className = 'rental-bar';
-          bar.style.position = 'absolute';
-          bar.style.left = left + 'px';
-          bar.style.top = top + 'px';
-          bar.style.width = width + 'px';
-          bar.style.height = '40px';
-          bar.style.borderRadius = '3px';
-          bar.style.color = 'white';
-          bar.style.padding = '5px 30px 5px 5px';
-          bar.style.fontSize = '16px';
-          bar.style.zIndex = '15';
-          bar.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-          bar.style.overflow = 'hidden';
-          bar.style.textOverflow = 'ellipsis';
-          bar.style.whiteSpace = 'nowrap';
-          bar.style.display = 'flex';
-          bar.style.alignItems = 'center';
-
-          // バーデータとテキスト
-          bar.dataset.rentalId = rental['登録日時'] ? rental['登録日時'].toString() : '';
-          bar.dataset.layer = layer;
-          bar.dataset.location = location;
-
-          bar.textContent = `${rental['数量']}台-${rental['使用場所']}(${getUserDisplayName(rental['借用者'])})`;
-          
-          // 定置場所と使用場所に基づいて色を決定
-          if (location && rental['使用場所'] && location === rental['使用場所']) {
-            // 同じ場所の場合は緑色
-            bar.style.backgroundColor = '#26a69a';
-          } else {
-            // 異なる場所の場合はオレンジ色
-            bar.style.backgroundColor = '#ff9800';
-          }
-
-          // 返却ボタンを追加
-          const returnButton = document.createElement('button');
-          returnButton.className = 'btn-floating btn-small return-button';
-          returnButton.innerHTML = '<i class="material-icons">reply</i>';
-          returnButton.style.position = 'absolute';
-          returnButton.style.right = '5px';
-          returnButton.style.top = '50%';
-          returnButton.style.transform = 'translateY(-50%)';
-          returnButton.title = '返却';
-          
-          // 返却ボタンクリックイベント
-          returnButton.addEventListener('click', function(e) {
-            e.stopPropagation(); // バブリングを防止
-            showReturnModal(rental);
-          });
-          
-          bar.appendChild(returnButton);
-
-          // バークリックイベント
-          bar.addEventListener('click', function(e) {
-            // スワイプ操作中またはスワイプ直後は無視
-            if (isSwiping || (Date.now() - swipeEndTime < userSettings.swipeDelay)) {
-              e.preventDefault();
-              e.stopPropagation();
-              return;
-            }
-            showReturnModal(rental);
-          });
-
-          // タイムラインに追加
-          timeline.appendChild(bar);
-        } catch (error) {
-          console.error('貸出バー作成エラー:', error);
-        }
-      });
-    }
-    
-    // タイムラインを行に追加
-    row.appendChild(timeline);
-    // 行をコンテナに追加
-    rowsContainer.appendChild(row);
+      timelineRow.appendChild(rentalBar);
+    });
   });
   
-  // スクロール位置を復元
+  // スクロール同期設定
+  setupMobileScrollSync();
+  
+  // 本日ボタンのイベントを設定
+  document.getElementById('mobile-view-today')?.addEventListener('click', function() {
+    startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    updateGanttChart();
+  });
+  
+  console.log('改良版モバイルレイアウト作成完了');
+}
+
+// モバイルスクロール同期処理
+function setupMobileScrollSync() {
+  const dateHeaders = document.getElementById('date-headers');
+  const timelineArea = document.getElementById('gantt-timeline-area');
+  
+  if (!dateHeaders || !timelineArea) return;
+  
+  // 縦スクロール処理（機材名カラムと内容を同期）
+  const equipmentColumn = timelineArea.previousElementSibling;
+  if (equipmentColumn) {
+    // 縦スクロール同期
+    timelineArea.addEventListener('scroll', function() {
+      equipmentColumn.scrollTop = timelineArea.scrollTop;
+    });
+    
+    equipmentColumn.addEventListener('scroll', function() {
+      timelineArea.scrollTop = equipmentColumn.scrollTop;
+    });
+  }
+  
+  // 横スクロール処理（日付ヘッダーとタイムラインを同期）
+  dateHeaders.addEventListener('scroll', function() {
+    timelineArea.scrollLeft = dateHeaders.scrollLeft;
+  });
+  
+  timelineArea.addEventListener('scroll', function() {
+    dateHeaders.scrollLeft = timelineArea.scrollLeft;
+  });
+  
+  // タッチスワイプの処理
+  let startX, startY;
+  let isScrolling = false;
+  
+  function touchStart(e) {
+    if (e.touches.length !== 1) return;
+    
+    isScrolling = true;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    document.body.classList.add('swiping');
+  }
+  
+  function touchMove(e) {
+    if (!isScrolling || e.touches.length !== 1) return;
+    
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    
+    const deltaX = startX - x;
+    const deltaY = startY - y;
+    
+    // 横方向のスクロールが優勢なら
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      e.preventDefault(); // デフォルトのスクロールを防止
+      
+      // 日付ヘッダーとタイムラインの横スクロール同期
+      dateHeaders.scrollLeft += deltaX;
+      timelineArea.scrollLeft = dateHeaders.scrollLeft;
+      
+      // 次のイベントのために開始位置を更新
+      startX = x;
+      
+      // スワイプ中フラグを設定
+      isSwiping = true;
+    } else {
+      // 縦スクロールの場合は開始Y位置を更新
+      startY = y;
+    }
+  }
+  
+  function touchEnd() {
+    isScrolling = false;
+    document.body.classList.remove('swiping');
+    
+    // スワイプ終了時刻を記録（モーダル表示抑制用）
+    swipeEndTime = Date.now();
+    
+    // 後処理
+    setTimeout(() => {
+      isSwiping = false;
+    }, 50);
+    
+    // スクロール位置を保存（画面更新時の復元用）
+    savedScrollPosition.left = dateHeaders.scrollLeft;
+    savedScrollPosition.top = timelineArea.scrollTop;
+  }
+  
+  // イベントリスナー設定
+  [dateHeaders, timelineArea].forEach(element => {
+    element.addEventListener('touchstart', touchStart, { passive: true });
+    element.addEventListener('touchmove', touchMove, { passive: false });
+    element.addEventListener('touchend', touchEnd);
+  });
+  
+  // 復元されたスクロール位置に設定
   setTimeout(() => {
-    const dateHeadersElem = document.getElementById('date-headers');
-    if (dateHeadersElem && savedScrollPosition.left > 0) {
-      dateHeadersElem.scrollLeft = savedScrollPosition.left;
+    if (savedScrollPosition.left > 0) {
+      dateHeaders.scrollLeft = savedScrollPosition.left;
+      timelineArea.scrollLeft = savedScrollPosition.left;
     }
     
-    const ganttRowsElem = document.getElementById('gantt-rows');
-    if (ganttRowsElem && savedScrollPosition.top > 0) {
-      ganttRowsElem.scrollTop = savedScrollPosition.top;
+    if (savedScrollPosition.top > 0) {
+      timelineArea.scrollTop = savedScrollPosition.top;
+      equipmentColumn.scrollTop = savedScrollPosition.top;
     }
   }, 100);
 }
+// テーブルスクロール処理
+function setupTableScroll(tableContainer) {
+  if (!tableContainer) return;
+  
+  let isScrolling = false;
+  let startX;
+  let scrollLeft;
+  
+  // タッチイベント
+  tableContainer.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    
+    isScrolling = true;
+    startX = e.touches[0].clientX;
+    scrollLeft = tableContainer.scrollLeft;
+    tableContainer.style.cursor = 'grabbing';
+  }, { passive: true });
+  
+  tableContainer.addEventListener('touchmove', function(e) {
+    if (!isScrolling || e.touches.length !== 1) return;
+    
+    const x = e.touches[0].clientX;
+    const walk = (startX - x) * 1.5; // 1.5倍のスピード
+    tableContainer.scrollLeft = scrollLeft + walk;
+  }, { passive: true });
+  
+  tableContainer.addEventListener('touchend', function() {
+    isScrolling = false;
+    tableContainer.style.cursor = '';
+  });
+  
+  // マウスイベント（PC表示でも動作）
+  tableContainer.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    isScrolling = true;
+    startX = e.clientX;
+    scrollLeft = tableContainer.scrollLeft;
+    tableContainer.style.cursor = 'grabbing';
+  });
+  
+  tableContainer.addEventListener('mousemove', function(e) {
+    if (!isScrolling) return;
+    e.preventDefault();
+    const x = e.clientX;
+    const walk = (startX - x) * 1.5;
+    tableContainer.scrollLeft = scrollLeft + walk;
+  });
+  
+  tableContainer.addEventListener('mouseup', function() {
+    isScrolling = false;
+    tableContainer.style.cursor = '';
+  });
+  
+  tableContainer.addEventListener('mouseleave', function() {
+    isScrolling = false;
+    tableContainer.style.cursor = '';
+  });
+}
+
   
   // createDesktopLayout関数の完全なコード
 function createDesktopLayout(days) {
@@ -4983,192 +5128,91 @@ function setupMobileSupport() {
   }
 }
 
-  // モバイル設定を更新
+  // updateMobileSettings関数の更新版
 function updateMobileSettings() {
   try {
     const isMobileView = document.body.classList.contains('mobile-view');
-    localStorage.setItem('mobileView', isMobileView ? 'true' : 'false');
     
-    if (isMobileView && !addedMobileStyles) {
-      addCustomMobileStyles();
-      addedMobileStyles = true;
+    // モバイル用のスタイルを追加
+    if (isMobileView) {
+      // すでに追加済みのスタイルがあれば削除
+      const existingStyle = document.getElementById('mobile-gantt-style');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+      
+      // 新しいスタイルを追加
+      const styleElement = document.createElement('style');
+      styleElement.id = 'mobile-gantt-style';
+      styleElement.textContent = `
+        /* モバイル表示用のスタイル */
+        .gantt-container {
+          display: flex !important;
+          flex-direction: column !important;
+          height: calc(100vh - 180px) !important;
+          overflow: hidden !important;
+        }
+        
+        .mobile-table-container {
+          flex: 1 1 auto !important;
+          position: relative !important;
+          display: flex !important;
+          flex-direction: column !important;
+          overflow: hidden !important;
+          border: 1px solid #e0e0e0 !important;
+          border-radius: 4px !important;
+        }
+        
+        #date-headers::-webkit-scrollbar,
+        #gantt-timeline-area::-webkit-scrollbar {
+          height: 0 !important;
+          width: 0 !important;
+          display: none !important;
+        }
+        
+        #date-headers,
+        #gantt-timeline-area {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+        
+        .date-header {
+          font-weight: bold !important;
+          text-align: center !important;
+          background-color: #f5f5f5 !important;
+        }
+        
+        /* スワイプ中のスタイル */
+        body.swiping * {
+          user-select: none !important;
+        }
+        
+        /* スクロールバー非表示 */
+        .mobile-table-container *::-webkit-scrollbar {
+          width: 0 !important;
+          height: 0 !important;
+          display: none !important;
+        }
+        
+        /* 本日ボタンスタイル */
+        #mobile-view-today {
+          margin: 5px 0 !important;
+          width: 100% !important;
+        }
+        
+        /* 行の高さ統一 */
+        .gantt-row {
+          height: 80px !important;
+        }
+      `;
+      document.head.appendChild(styleElement);
+      
+      console.log('モバイルスタイル適用');
     }
-    
-    console.log(`表示モードを${isMobileView ? 'モバイル' : 'PC'}に変更しました`);
   } catch (error) {
     console.error('モバイル設定更新エラー:', error);
   }
 }
-
-  // 長押し選択モードの設定
-  function setupLongPressSelection() {
-    try {
-      const ganttContainer = document.querySelector('.gantt-container');
-      if (!ganttContainer) return;
-      
-      // 長押し判定用変数
-      let longPressTimer = null;
-      let isLongPressing = false;
-      let longPressStartElement = null;
-      let longPressStartDate = null;
-      let longPressEndDate = null;
-      
-      // タッチ開始
-      ganttContainer.addEventListener('touchstart', function(e) {
-        // 既にドラッグ操作中は何もしない
-        if (isDraggingBar || isResizingBar) return;
-        
-        // 貸出バーの場合は通常のクリックイベントを処理
-        if (e.target.classList.contains('rental-bar') || 
-            e.target.closest('.rental-bar')) {
-          return;
-        }
-        
-        // 機材情報部分なら通常スクロール
-        if (e.target.closest('.gantt-item')) {
-          return;
-        }
-        
-        const touch = e.touches[0];
-        const element = document.elementFromPoint(touch.clientX, touch.clientY);
-        
-        // ガントチャートのセルだけを対象にする
-        if (element && element.classList.contains('gantt-day')) {
-          // 長押し判定用タイマー
-          longPressTimer = setTimeout(function() {
-            // バイブレーション（利用可能な場合）
-            if (navigator.vibrate) {
-              navigator.vibrate(50);
-            }
-            
-            isLongPressing = true;
-            longPressStartElement = element;
-            longPressStartDate = element.dataset.date;
-            longPressEndDate = element.dataset.date;
-            
-            // 最初のセルをハイライト
-            element.classList.add('touch-selection');
-          }, 500); // 500ms長押しで選択モード開始
-        }
-      });
-      
-      // タッチ移動
-      ganttContainer.addEventListener('touchmove', function(e) {
-        // 長押し中でない場合は通常スクロール
-        if (!isLongPressing) return;
-        
-        e.preventDefault(); // スクロールを防止
-        
-        const touch = e.touches[0];
-        const element = document.elementFromPoint(touch.clientX, touch.clientY);
-        
-        // ガントチャートのセルだけを対象にする
-        if (element && element.classList.contains('gantt-day')) {
-          // 現在の日付を取得
-          const currentDate = element.dataset.date;
-          
-          if (currentDate) {
-            // 終了日を更新
-            longPressEndDate = currentDate;
-            
-            // 同じタイムラインのセルを取得
-            const timeline = element.closest('.gantt-timeline');
-            if (timeline) {
-              const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
-              
-              // 全てのハイライトを消去
-              dayCells.forEach(cell => {
-                cell.classList.remove('touch-selection');
-              });
-              
-              // 開始日と終了日を日付オブジェクトに変換
-              const startDate = new Date(longPressStartDate);
-              const endDate = new Date(longPressEndDate);
-              
-              // 日付順に並び替え
-              const minDate = startDate < endDate ? startDate : endDate;
-              const maxDate = startDate > endDate ? startDate : endDate;
-              
-              // 範囲内のセルをハイライト
-              dayCells.forEach(cell => {
-                if (!cell.dataset.date) return;
-                
-                const cellDate = new Date(cell.dataset.date);
-                if (cellDate >= minDate && cellDate <= maxDate) {
-                  cell.classList.add('touch-selection');
-                }
-              });
-            }
-          }
-        }
-      }, { passive: false });
-      
-      // タッチ終了
-      ganttContainer.addEventListener('touchend', function(e) {
-        // 長押しタイマーをクリア
-        clearTimeout(longPressTimer);
-        
-        // 長押し中でない場合は何もしない
-        if (!isLongPressing) return;
-        
-        try {
-          // 開始日と終了日を取得
-          if (longPressStartDate && longPressEndDate) {
-            const startDate = new Date(longPressStartDate);
-            const endDate = new Date(longPressEndDate);
-            
-            // 日付順に並び替え
-            const fromDate = startDate <= endDate ? longPressStartDate : longPressEndDate;
-            const toDate = startDate > endDate ? longPressStartDate : longPressEndDate;
-            
-            // 機材情報を取得
-            const timeline = longPressStartElement.closest('.gantt-timeline');
-            if (timeline) {
-              const equipmentId = timeline.dataset.equipment;
-              const location = timeline.dataset.location || '';
-              
-              // ハイライトを削除
-              const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
-              dayCells.forEach(cell => {
-                cell.classList.remove('touch-selection');
-              });
-              
-              // 貸出モーダルを表示
-              if (fromDate && toDate && equipmentId) {
-                showRentalModal(equipmentId, fromDate, toDate, location);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('長押し選択終了エラー:', error);
-        }
-        
-        // 長押し状態をリセット
-        isLongPressing = false;
-        longPressStartElement = null;
-        longPressStartDate = null;
-        longPressEndDate = null;
-      });
-      
-      // キャンセル時
-      ganttContainer.addEventListener('touchcancel', function(e) {
-        clearTimeout(longPressTimer);
-        
-        // ハイライトを削除
-        document.querySelectorAll('.touch-selection').forEach(cell => {
-          cell.classList.remove('touch-selection');
-        });
-        
-        // 状態をリセット
-        isLongPressing = false;
-        longPressStartElement = null;
-        longPressStartDate = null;
-        longPressEndDate = null;
-      });
-    } catch (error) {
-      console.error('長押し選択モード設定エラー:', error);
-    }
-  }
   
   /**
  * モバイル版カレンダースワイプ修正
@@ -5429,305 +5473,323 @@ function moveToNextPeriod() {
     clearTimeout(fallbackTimer);
   }
   
-  // setupMobileEvents関数を完全に書き直し
-  function setupMobileEvents() {
-    try {
-      console.log('モバイル向けイベント設定開始');
-      
-      // カレンダースワイプのセットアップ
-      setupCalendarSwipe();
-      
-      // モバイル用の機材選択セレクトボックスイベント
-      const mobileEquipmentSelect = document.getElementById('mobile-equipment-select');
-      if (mobileEquipmentSelect) {
-        const clone = mobileEquipmentSelect.cloneNode(true);
-        mobileEquipmentSelect.parentNode.replaceChild(clone, mobileEquipmentSelect);
-        
-        clone.addEventListener('change', function(e) {
-          console.log('Mobile equipment select changed:', e.target.value);
-          selectedEquipmentWithLocation = e.target.value;
-          const parts = selectedEquipmentWithLocation.split('|');
-          selectedEquipment = parts[0]; // 機器管理番号部分
-          selectedLocation = parts[1] || ''; // 定置場所部分
-          updateGanttChart();
-          
-          // スクロール処理を確実に実行
-          setTimeout(() => {
-            scrollToSelectedEquipment();
-          }, 500);
-        });
-      }
-      
-      // モバイルの「本日」ボタン
-      document.getElementById('mobile-view-today')?.addEventListener('click', function() {
-        startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        updateGanttChart();
-      });
-      
-      // モバイルメニューボタン設定
-      document.getElementById('mobile-menu-undo')?.addEventListener('click', function() {
-        const undoButton = document.getElementById('undo-button');
-        if (undoButton && !undoButton.disabled) {
-          undoButton.click();
-        }
-      });
-      
-      document.getElementById('mobile-manage-projects')?.addEventListener('click', function() {
-        openProjectsModal();
-      });
-      
-      document.getElementById('mobile-manage-equipment')?.addEventListener('click', function() {
-        // 機器マスター管理モーダルを開く関数を呼び出し
-        const manageEquipmentBtn = document.getElementById('manage-equipment-btn');
-        if (manageEquipmentBtn) {
-          manageEquipmentBtn.click();
-        }
-      });
-      
-      // PCに戻すボタン
-      document.getElementById('return-to-desktop')?.addEventListener('click', function() {
-        document.body.classList.remove('mobile-view');
-        updateMobileSettings();
-        // スクロール位置をリセット
-        savedScrollPosition = { top: 0, left: 0 };
-        updateGanttChart();
-      });
-      
-      // 文字サイズスライダー
-      const fontSizeSlider = document.getElementById('font-size-slider');
-      if (fontSizeSlider) {
-        fontSizeSlider.addEventListener('input', function(e) {
-          document.documentElement.style.setProperty('--base-font-size', e.target.value + 'px');
-        });
-      }
-      
-      console.log('モバイル向けイベント設定完了');
-    } catch (error) {
-      console.error('モバイル向けイベント設定エラー:', error);
-    }
-  }
-
-  // モバイル向けのスクロール同期設定を改善
-function setupMobileScroll() {
-  // PC表示の場合は処理しない
-  if (!document.body.classList.contains('mobile-view')) {
-    return;
-  }
-  
+  // モバイル向けイベントの設定
+function setupMobileEvents() {
   try {
-    // 日付ヘッダー部分
-    const dateHeaders = document.querySelector('.gantt-dates');
-    // すべてのタイムライン
-    const timelines = document.querySelectorAll('.gantt-timeline');
+    console.log('モバイル向けイベント設定開始');
     
-    if (!dateHeaders || timelines.length === 0) {
+    // モバイルメニューボタンのイベント設定
+    document.getElementById('mobile-menu-undo')?.addEventListener('click', function() {
+      const undoButton = document.getElementById('undo-button');
+      if (undoButton && !undoButton.disabled) {
+        undoButton.click();
+      }
+    });
+    
+    document.getElementById('mobile-manage-projects')?.addEventListener('click', function() {
+      openProjectsModal();
+    });
+    
+    document.getElementById('mobile-manage-equipment')?.addEventListener('click', function() {
+      openEquipmentModal();
+    });
+    
+    document.getElementById('return-to-desktop')?.addEventListener('click', function() {
+      document.body.classList.remove('mobile-view');
+      updateGanttChart();
+    });
+    
+    // モバイル機器選択の設定
+    const mobileSelect = document.getElementById('mobile-equipment-select');
+    if (!mobileSelect) {
+      // モバイル用機器選択ドロップダウンがなければ作成
+      createMobileEquipmentSelect();
+    }
+    
+    // フォントサイズスライダー設定
+    const fontSizeSlider = document.getElementById('font-size-slider');
+    if (fontSizeSlider) {
+      fontSizeSlider.addEventListener('input', function() {
+        updateFontSize(this.value);
+      });
+      
+      // 初期値を設定
+      fontSizeSlider.value = userSettings.fontSize || 16;
+      updateFontSize(fontSizeSlider.value);
+    }
+    
+    // 本日ボタンの設定
+    document.getElementById('mobile-view-today')?.addEventListener('click', function() {
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      updateGanttChart();
+    });
+    
+    // カレンダー日付部分とタイムラインのスワイプ・スクロール処理を改善
+    setupMobileSwipeHandlers();
+    
+    console.log('モバイル向けイベント設定完了');
+  } catch (error) {
+    console.error('モバイルイベント設定エラー:', error);
+  }
+  // タッチイベントのセットアップを追加
+  setupMobileTouchEvents();
+}
+
+// モバイル向けスワイプハンドラーの設定（新規追加）
+function setupMobileSwipeHandlers() {
+  console.log('モバイルスワイプハンドラー設定開始');
+  
+  // 既存のイベントリスナーをクリア（もし存在する場合）
+  document.removeEventListener('touchstart', handleMobileTouchStart);
+  document.removeEventListener('touchmove', handleMobileTouchMove);
+  document.removeEventListener('touchend', handleMobileTouchEnd);
+  
+  // スワイプ用変数
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchMoveX = 0;
+  let touchMoveY = 0;
+  let lastScrollLeft = 0;
+  let swipeTargetScrollElement = null;
+  
+  // タッチ開始ハンドラー
+  function handleMobileTouchStart(e) {
+    if (isDraggingBar || isResizingBar) return; // バーのドラッグ中はスワイプを無効化
+    
+    // モバイル表示時のみスワイプ処理を有効にする
+    if (!document.body.classList.contains('mobile-view')) return;
+    
+    // ドラッグ操作対象のタッチイベントを無視
+    if (e.target.closest('.rental-bar') || e.target.closest('.return-button')) return;
+    
+    // 位置を保存
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchMoveX = touchStartX;
+    touchMoveY = touchStartY;
+    
+    // スワイプ対象となるスクロール要素を特定
+    if (e.target.closest('.gantt-timeline')) {
+      // 日付タイムライン部分のスワイプ
+      swipeTargetScrollElement = document.querySelector('#date-headers');
+    } else if (e.target.closest('.gantt-dates')) {
+      // 日付ヘッダー部分のスワイプ
+      swipeTargetScrollElement = document.querySelector('#date-headers');
+    } else {
+      // その他の部分のタッチはスワイプ対象外
+      swipeTargetScrollElement = null;
       return;
     }
     
-    // すべてのイベントリスナーを一度削除（重複を防ぐため）
-    dateHeaders.removeEventListener('scroll', synchronizeScroll);
-    timelines.forEach(timeline => {
-      timeline.removeEventListener('scroll', synchronizeScroll);
-    });
-    
-    // スクロール同期関数
-    function synchronizeScroll(e) {
-      const scrollLeft = e.target.scrollLeft;
+    // スクロール位置を記録
+    if (swipeTargetScrollElement) {
+      lastScrollLeft = swipeTargetScrollElement.scrollLeft;
       
-      // 発生元に応じて他の要素を同期
-      if (e.target === dateHeaders) {
-        // 日付ヘッダーがスクロールされた場合、すべてのタイムラインを同期
-        timelines.forEach(timeline => {
-          if (timeline.scrollLeft !== scrollLeft) {
-            timeline.scrollLeft = scrollLeft;
-          }
-        });
-      } else {
-        // タイムラインがスクロールされた場合、日付ヘッダーとすべてのタイムラインを同期
-        if (dateHeaders.scrollLeft !== scrollLeft) {
-          dateHeaders.scrollLeft = scrollLeft;
-        }
-        
-        timelines.forEach(tl => {
-          if (tl !== e.target && tl.scrollLeft !== scrollLeft) {
-            tl.scrollLeft = scrollLeft;
-          }
-        });
-      }
+      // スワイプ中のクラスを追加
+      document.body.classList.add('swiping');
       
-      // 横スクロール位置を保存
-      savedScrollPosition.left = scrollLeft;
-    }
-    
-    // スクロールイベントリスナーを追加
-    dateHeaders.addEventListener('scroll', synchronizeScroll, { passive: true });
-    timelines.forEach(timeline => {
-      timeline.addEventListener('scroll', synchronizeScroll, { passive: true });
-    });
-    
-    // タッチイベントによるスワイプ処理の改善
-    setupMobileSwipe();
-    
-    // タッチ操作時に、ドキュメント全体に「swiping」クラスを追加して機材名カラムを固定
-    function setupMobileSwipe() {
-      // すでに保存されたスクロール位置があれば復元
-      if (savedScrollPosition.left > 0) {
-        dateHeaders.scrollLeft = savedScrollPosition.left;
-        timelines.forEach(timeline => {
-          timeline.scrollLeft = savedScrollPosition.left;
-        });
-      }
-      
-      // 日付ヘッダーのタッチスタート時
-      dateHeaders.addEventListener('touchstart', function(e) {
-        if (e.touches.length !== 1) return; // マルチタッチは無視
-        
-        // スワイプ状態を記録
-        isSwiping = true;
-        document.body.classList.add('swiping');
-        
-        // タッチ開始位置
-        const startX = e.touches[0].clientX;
-        const startScrollLeft = dateHeaders.scrollLeft;
-        
-        // 機材名カラムにスワイプ固定クラスを追加
-        const itemCells = document.querySelectorAll('.gantt-item');
-        itemCells.forEach(cell => {
-          cell.classList.add('swipe-fixed');
-        });
-        
-        // タッチ移動時
-        function onTouchMove(moveEvent) {
-          if (!isSwiping) return;
-          
-          // 横スワイプのみ処理（縦スクロールは標準動作）
-          const dx = moveEvent.touches[0].clientX - startX;
-          const absDX = Math.abs(dx);
-          
-          // 横方向の移動が5px以上ある場合のみ処理（小さな動きは無視）
-          if (absDX > 5) {
-            // ブラウザのデフォルトスクロールを抑制
-            moveEvent.preventDefault();
-            
-            // スクロール位置を更新（スワイプと逆方向へ）
-            const newScrollLeft = startScrollLeft - dx;
-            
-            // 日付ヘッダーと全タイムラインのスクロール位置を同期
-            dateHeaders.scrollLeft = newScrollLeft;
-            timelines.forEach(timeline => {
-              timeline.scrollLeft = newScrollLeft;
-            });
-          }
-        }
-        
-        // タッチ終了時
-        function onTouchEnd() {
-          // スワイプ状態を解除
-          isSwiping = false;
-          document.body.classList.remove('swiping');
-          
-          // スワイプ終了時刻を記録（モーダル表示抑制用）
-          swipeEndTime = Date.now();
-          
-          // 機材名カラムからスワイプ固定クラスを削除
-          const itemCells = document.querySelectorAll('.gantt-item');
-          itemCells.forEach(cell => {
-            cell.classList.remove('swipe-fixed');
-          });
-          
-          // 横スクロール位置を保存
-          savedScrollPosition.left = dateHeaders.scrollLeft;
-          
-          // イベントリスナーを削除
-          document.removeEventListener('touchmove', onTouchMove);
-          document.removeEventListener('touchend', onTouchEnd);
-        }
-        
-        // イベントリスナーを追加
-        document.addEventListener('touchmove', onTouchMove, { passive: false });
-        document.addEventListener('touchend', onTouchEnd);
-      }, { passive: true });
-      
-      // タイムラインにも同様のタッチイベント処理を追加
-      timelines.forEach(timeline => {
-        timeline.addEventListener('touchstart', function(e) {
-          if (e.touches.length !== 1) return; // マルチタッチは無視
-          
-          // すでにスワイプ中なら処理しない
-          if (isSwiping) return;
-          
-          // スワイプ状態を記録
-          isSwiping = true;
-          document.body.classList.add('swiping');
-          
-          // タッチ開始位置
-          const startX = e.touches[0].clientX;
-          const startScrollLeft = timeline.scrollLeft;
-          
-          // 機材名カラムにスワイプ固定クラスを追加
-          const itemCells = document.querySelectorAll('.gantt-item');
-          itemCells.forEach(cell => {
-            cell.classList.add('swipe-fixed');
-          });
-          
-          // タッチ移動時
-          function onTouchMove(moveEvent) {
-            if (!isSwiping) return;
-            
-            // 横スワイプのみ処理
-            const dx = moveEvent.touches[0].clientX - startX;
-            const absDX = Math.abs(dx);
-            
-            if (absDX > 5) {
-              // ブラウザのデフォルトスクロールを抑制
-              moveEvent.preventDefault();
-              
-              // スクロール位置を更新
-              const newScrollLeft = startScrollLeft - dx;
-              
-              // 日付ヘッダーと全タイムラインのスクロール位置を同期
-              dateHeaders.scrollLeft = newScrollLeft;
-              timelines.forEach(tl => {
-                tl.scrollLeft = newScrollLeft;
-              });
-            }
-          }
-          
-          // タッチ終了時
-          function onTouchEnd() {
-            // スワイプ状態を解除
-            isSwiping = false;
-            document.body.classList.remove('swiping');
-            
-            // スワイプ終了時刻を記録
-            swipeEndTime = Date.now();
-            
-            // 機材名カラムからスワイプ固定クラスを削除
-            const itemCells = document.querySelectorAll('.gantt-item');
-            itemCells.forEach(cell => {
-              cell.classList.remove('swipe-fixed');
-            });
-            
-            // 横スクロール位置を保存
-            savedScrollPosition.left = timeline.scrollLeft;
-            
-            // イベントリスナーを削除
-            document.removeEventListener('touchmove', onTouchMove);
-            document.removeEventListener('touchend', onTouchEnd);
-          }
-          
-          // イベントリスナーを追加
-          document.addEventListener('touchmove', onTouchMove, { passive: false });
-          document.addEventListener('touchend', onTouchEnd);
-        }, { passive: true });
+      // 機材名カラムを固定するためのクラスを追加
+      document.querySelectorAll('.gantt-item').forEach(item => {
+        item.classList.add('swipe-fixed');
       });
     }
+  }
+  
+  // タッチ移動ハンドラー
+  function handleMobileTouchMove(e) {
+    // スワイプ対象が特定されていない場合は処理しない
+    if (!swipeTargetScrollElement || !document.body.classList.contains('swiping')) return;
+    
+    // イベント位置を更新
+    touchMoveX = e.touches[0].clientX;
+    touchMoveY = e.touches[0].clientY;
+    
+    // 横方向の移動距離
+    const moveX = touchStartX - touchMoveX;
+    
+    // 縦スクロールより横スクロールが優勢なら横スクロール処理
+    if (Math.abs(moveX) > Math.abs(touchStartY - touchMoveY)) {
+      // デフォルトのスクロール動作を防止
+      e.preventDefault();
+      
+      // スクロール位置を更新
+      swipeTargetScrollElement.scrollLeft = lastScrollLeft + moveX;
+      
+      // 同期対象の要素も一緒にスクロール
+      syncScrollPositions(swipeTargetScrollElement.scrollLeft);
+      
+      // スワイプ中フラグを設定
+      isSwiping = true;
+    }
+  }
+  
+  // タッチ終了ハンドラー
+  function handleMobileTouchEnd(e) {
+    // スワイプ中でなければ何もしない
+    if (!document.body.classList.contains('swiping')) return;
+    
+    // スワイプ終了時刻を記録（モーダル表示抑制用）
+    swipeEndTime = Date.now();
+    
+    // スワイプ中フラグをリセット
+    document.body.classList.remove('swiping');
+    
+    // 機材名カラム固定クラスを削除
+    document.querySelectorAll('.gantt-item.swipe-fixed').forEach(item => {
+      item.classList.remove('swipe-fixed');
+    });
+    
+    // 一定時間後にスワイプフラグをリセット
+    setTimeout(() => {
+      isSwiping = false;
+    }, 50);
+    
+    // スクロール位置を保存（画面更新時の復元用）
+    if (swipeTargetScrollElement) {
+      savedScrollPosition = {
+        top: savedScrollPosition.top, // 縦位置は維持
+        left: swipeTargetScrollElement.scrollLeft
+      };
+    }
+    
+    // 参照をクリア
+    swipeTargetScrollElement = null;
+  }
+  
+  // スクロール位置を全ての関連要素に同期する関数
+  function syncScrollPositions(scrollLeft) {
+    // 日付ヘッダー
+    const dateHeaders = document.querySelector('#date-headers');
+    if (dateHeaders) {
+      dateHeaders.scrollLeft = scrollLeft;
+    }
+    
+    // 全てのタイムライン
+    const timelines = document.querySelectorAll('.gantt-timeline');
+    timelines.forEach(timeline => {
+      timeline.scrollLeft = scrollLeft;
+    });
+  }
+  
+  // イベントリスナーを設定
+  document.addEventListener('touchstart', handleMobileTouchStart, { passive: false });
+  document.addEventListener('touchmove', handleMobileTouchMove, { passive: false });
+  document.addEventListener('touchend', handleMobileTouchEnd);
+  
+  console.log('モバイルスワイプハンドラー設定完了');
+}
+
+  // モバイル向けスクロール同期の設定
+function setupMobileScroll() {
+  if (!document.body.classList.contains('mobile-view')) return;
+  
+  try {
+    console.log('モバイルスクロール同期設定開始');
+    
+    // 既存のイベントリスナーを削除
+    const dateHeaders = document.getElementById('date-headers');
+    const ganttRows = document.getElementById('gantt-rows');
+    
+    if (dateHeaders) {
+      const newDateHeaders = dateHeaders.cloneNode(true);
+      dateHeaders.parentNode.replaceChild(newDateHeaders, dateHeaders);
+      
+      // 新しいスクロールイベントを追加
+      newDateHeaders.addEventListener('scroll', function() {
+        // すべてのタイムラインに同じスクロール位置を設定
+        document.querySelectorAll('.gantt-timeline').forEach(function(timeline) {
+          timeline.scrollLeft = newDateHeaders.scrollLeft;
+        });
+        
+        // スクロール位置を保存
+        savedScrollPosition.left = newDateHeaders.scrollLeft;
+      });
+    }
+    
+    // タッチイベントのセットアップ
+    setupMobileTouchEvents();
     
     console.log('モバイルスクロール同期設定完了');
   } catch (error) {
     console.error('モバイルスクロール設定エラー:', error);
   }
+}
+
+// シンプルなモバイルタッチイベント処理
+function setupMobileTouchEvents() {
+  let startX, startY;
+  let dateHeaders = document.getElementById('date-headers');
+  
+  // タッチ開始
+  function touchStart(e) {
+    if (!document.body.classList.contains('mobile-view')) return;
+    
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    
+    // スワイプ中状態を設定
+    document.body.classList.add('swiping');
+  }
+  
+  // タッチ中の移動
+  function touchMove(e) {
+    if (!document.body.classList.contains('swiping')) return;
+    if (!dateHeaders) return;
+    
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    
+    // X方向の移動量が大きい場合のみ処理（Y方向スクロールを妨げない）
+    if (Math.abs(currentX - startX) > Math.abs(currentY - startY)) {
+      e.preventDefault(); // デフォルトのスクロールを防止
+      
+      // 移動量を計算
+      const moveX = startX - currentX;
+      
+      // スクロール位置を更新
+      dateHeaders.scrollLeft += moveX;
+      
+      // すべてのタイムラインに同じスクロール位置を設定
+      document.querySelectorAll('.gantt-timeline').forEach(function(timeline) {
+        timeline.scrollLeft = dateHeaders.scrollLeft;
+      });
+      
+      // 次のタッチムーブイベントのための開始位置を更新
+      startX = currentX;
+      
+      // スワイプ中フラグを設定
+      isSwiping = true;
+    }
+  }
+  
+  // タッチ終了
+  function touchEnd() {
+    // スワイプ終了
+    document.body.classList.remove('swiping');
+    
+    // スワイプ終了時間を記録（モーダル表示抑制用）
+    swipeEndTime = Date.now();
+    
+    // 位置を保存
+    if (dateHeaders) {
+      savedScrollPosition.left = dateHeaders.scrollLeft;
+    }
+    
+    // スワイプフラグをリセット
+    setTimeout(function() {
+      isSwiping = false;
+    }, 50);
+  }
+  
+  // 既存のイベントリスナーを削除して再設定
+  document.removeEventListener('touchstart', touchStart);
+  document.removeEventListener('touchmove', touchMove);
+  document.removeEventListener('touchend', touchEnd);
+  
+  document.addEventListener('touchstart', touchStart, { passive: true });
+  document.addEventListener('touchmove', touchMove, { passive: false });
+  document.addEventListener('touchend', touchEnd);
 }
 
   // 7. 日付ヘッダースクロールイベントハンドラ
