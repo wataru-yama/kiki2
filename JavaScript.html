@@ -991,28 +991,8 @@ function adjustGanttHeight() {
     }, 800); // 遅延時間を長めに設定（800ms）
   }
   
-  // createMobileLayout関数の修正部分
+  // createMobileLayout関数の修正
 function createMobileLayout(days) {
-  // キャッシュシステムの導入 - パフォーマンス向上のため
-  if (!window.layoutCache) {
-    window.layoutCache = {
-      lastDays: null,
-      lastEquipmentList: null
-    };
-  }
-  
-  // 入力データの変更を検出
-  const daysChanged = !window.layoutCache.lastDays || 
-    window.layoutCache.lastDays[0].getTime() !== days[0].getTime() ||
-    window.layoutCache.lastDays[days.length - 1].getTime() !== days[days.length - 1].getTime();
-  
-  const equipmentChanged = !window.layoutCache.lastEquipmentList || 
-    window.layoutCache.lastEquipmentList.length !== equipmentList.length;
-  
-  // キャッシュ更新
-  window.layoutCache.lastDays = [...days];
-  window.layoutCache.lastEquipmentList = [...equipmentList];
-  
   // ガントチャートコンテナを取得
   const ganttContainer = document.querySelector('.gantt-container');
   if (!ganttContainer) return;
@@ -1034,7 +1014,7 @@ function createMobileLayout(days) {
   const headerItem = document.createElement('div');
   headerItem.className = 'gantt-item';
   headerItem.textContent = '機材名';
-  headerItem.style.zIndex = '30'; // 最前面に固定
+  headerItem.style.zIndex = '31'; // 最前面に固定
   headerRow.appendChild(headerItem);
   
   // 日付ヘッダー（スクロール可能部分）
@@ -1043,14 +1023,12 @@ function createMobileLayout(days) {
   dateHeaders.id = 'date-headers';
   
   // 日付ヘッダーに日付を追加
-  const dateFragment = document.createDocumentFragment();
   days.forEach(day => {
     const header = document.createElement('div');
     header.className = 'gantt-date';
     header.textContent = formatDate(day, 'MM/dd');
-    dateFragment.appendChild(header);
+    dateHeaders.appendChild(header);
   });
-  dateHeaders.appendChild(dateFragment);
   
   // 日付ヘッダーをヘッダー行に追加
   headerRow.appendChild(dateHeaders);
@@ -1115,7 +1093,6 @@ function createMobileLayout(days) {
     row.className = 'gantt-row';
     row.dataset.equipmentId = equipmentId;
     row.dataset.location = location;
-    row.style.borderBottom = '1px solid #e0e0e0';
     
     // 現在選択中の機器+定置場所かどうかチェック
     const isSelected = selectedPlaceInfo && 
@@ -1131,9 +1108,6 @@ function createMobileLayout(days) {
     nameCell.className = 'gantt-item';
     nameCell.dataset.equipmentId = equipmentId;
     nameCell.dataset.location = location;
-    nameCell.style.position = 'sticky';
-    nameCell.style.left = '0';
-    nameCell.style.zIndex = '20';
     
     if (isSelected) {
       nameCell.style.backgroundColor = '#e3f2fd';
@@ -1165,14 +1139,11 @@ function createMobileLayout(days) {
     nameCell.appendChild(infoContainer);
     row.appendChild(nameCell);
     
-    // タイムライン作成
+    // タイムライン作成 - 重要な修正
     const timeline = document.createElement('div');
     timeline.className = 'gantt-timeline';
     timeline.dataset.equipment = equipmentId;
     timeline.dataset.location = location;
-    timeline.style.display = 'flex';
-    timeline.style.position = 'relative';
-    timeline.style.flex = '1';
     
     // マウスダウンイベント設定
     timeline.addEventListener('mousedown', onTimelineMouseDown);
@@ -1274,10 +1245,8 @@ function createMobileLayout(days) {
       row.style.height = (layerCount * 40 + 20) + 'px';
       timeline.style.height = (layerCount * 40 + 20) + 'px';
       
-      // ここで事前にcellWidth変数を定義
-      const cellWidth = document.body.classList.contains('mobile-view') ? 
-                      (userSettings.mobileCellWidth || 80) : 
-                      (userSettings.cellWidth || 80);
+      // セル幅を取得（常に80pxに固定）
+      const cellWidth = 80;
       
       // 各貸出バーを作成
       rentalRanges.forEach(rentalRange => {
@@ -1314,6 +1283,7 @@ function createMobileLayout(days) {
           // インデックスチェック
           if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
           
+          // バー作成（createRentalBarWithProperPosition関数の代わり）
           const width = ((endIdx - startIdx) + 1) * cellWidth;
           const left = startIdx * cellWidth;
           const top = layer * 40 + 10; // 10pxの余白を追加
@@ -1337,14 +1307,6 @@ function createMobileLayout(days) {
           bar.style.whiteSpace = 'nowrap';
           bar.style.display = 'flex';
           bar.style.alignItems = 'center';
-
-          // 元の位置情報を保存
-          bar.dataset.originalLeft = left;
-          bar.dataset.originalWidth = width;
-          bar.dataset.startIdx = startIdx;
-          bar.dataset.endIdx = endIdx;
-          bar.dataset.startDate = formatDate(startDay);
-          bar.dataset.endDate = formatDate(endDay);
 
           // バーデータとテキスト
           bar.dataset.rentalId = rental['登録日時'] ? rental['登録日時'].toString() : '';
@@ -1399,35 +1361,24 @@ function createMobileLayout(days) {
       });
     }
     
+    // タイムラインを行に追加
     row.appendChild(timeline);
+    // 行をコンテナに追加
     rowsContainer.appendChild(row);
   });
   
-  // 行コンテナにスクロールイベントを設定
-  rowsContainer.addEventListener('scroll', function() {
-    // 縦スクロール位置を保存
-    savedScrollPosition.top = this.scrollTop;
-  });
-  
-  // 日付ヘッダーにスクロールイベントを設定
-  dateHeaders.addEventListener('scroll', function() {
-    // 全タイムラインのスクロール位置を同期
-    const dateHeadersScrollLeft = this.scrollLeft;
-    document.querySelectorAll('.gantt-timeline').forEach(timeline => {
-      timeline.scrollLeft = dateHeadersScrollLeft;
-    });
-    
-    // 横スクロール位置を保存
-    savedScrollPosition.left = dateHeadersScrollLeft;
-  });
-  
-  // 日付スライダーを追加
-  setupDateSlider();
-  
-  // モバイル用のスクロール同期を設定
+  // スクロール位置を復元
   setTimeout(() => {
-    setupMobileScroll();
-  }, 200);
+    const dateHeadersElem = document.getElementById('date-headers');
+    if (dateHeadersElem && savedScrollPosition.left > 0) {
+      dateHeadersElem.scrollLeft = savedScrollPosition.left;
+    }
+    
+    const ganttRowsElem = document.getElementById('gantt-rows');
+    if (ganttRowsElem && savedScrollPosition.top > 0) {
+      ganttRowsElem.scrollTop = savedScrollPosition.top;
+    }
+  }, 100);
 }
   
   // createDesktopLayout関数の完全なコード
@@ -5557,45 +5508,227 @@ function moveToNextPeriod() {
     }
   }
 
-  // モバイル表示でのスクロール同期
-  function setupMobileScroll() {
-    try {
-      if (!document.body.classList.contains('mobile-view')) return;
+  // モバイル向けのスクロール同期設定を改善
+function setupMobileScroll() {
+  // PC表示の場合は処理しない
+  if (!document.body.classList.contains('mobile-view')) {
+    return;
+  }
+  
+  try {
+    // 日付ヘッダー部分
+    const dateHeaders = document.querySelector('.gantt-dates');
+    // すべてのタイムライン
+    const timelines = document.querySelectorAll('.gantt-timeline');
+    
+    if (!dateHeaders || timelines.length === 0) {
+      return;
+    }
+    
+    // すべてのイベントリスナーを一度削除（重複を防ぐため）
+    dateHeaders.removeEventListener('scroll', synchronizeScroll);
+    timelines.forEach(timeline => {
+      timeline.removeEventListener('scroll', synchronizeScroll);
+    });
+    
+    // スクロール同期関数
+    function synchronizeScroll(e) {
+      const scrollLeft = e.target.scrollLeft;
       
-      const dateHeaders = document.querySelector('#date-headers');
-      const timelines = document.querySelectorAll('.gantt-timeline');
-      
-      if (!dateHeaders || !timelines.length) return;
-      
-      // 日付ヘッダーのスクロールイベント
-      const scrollListener = function() {
-        const scrollLeft = this.scrollLeft;
-        
-        // すべてのタイムラインを同期
+      // 発生元に応じて他の要素を同期
+      if (e.target === dateHeaders) {
+        // 日付ヘッダーがスクロールされた場合、すべてのタイムラインを同期
         timelines.forEach(timeline => {
           if (timeline.scrollLeft !== scrollLeft) {
             timeline.scrollLeft = scrollLeft;
           }
         });
-      };
+      } else {
+        // タイムラインがスクロールされた場合、日付ヘッダーとすべてのタイムラインを同期
+        if (dateHeaders.scrollLeft !== scrollLeft) {
+          dateHeaders.scrollLeft = scrollLeft;
+        }
+        
+        timelines.forEach(tl => {
+          if (tl !== e.target && tl.scrollLeft !== scrollLeft) {
+            tl.scrollLeft = scrollLeft;
+          }
+        });
+      }
       
-      // 既存のイベントリスナーを削除
-      dateHeaders.removeEventListener('scroll', scrollListener);
-      
-      // 新しいイベントリスナーを追加
-      dateHeaders.addEventListener('scroll', scrollListener);
-      
-      // 初期スクロール位置を設定
-      if (savedScrollPosition && savedScrollPosition.left > 0) {
+      // 横スクロール位置を保存
+      savedScrollPosition.left = scrollLeft;
+    }
+    
+    // スクロールイベントリスナーを追加
+    dateHeaders.addEventListener('scroll', synchronizeScroll, { passive: true });
+    timelines.forEach(timeline => {
+      timeline.addEventListener('scroll', synchronizeScroll, { passive: true });
+    });
+    
+    // タッチイベントによるスワイプ処理の改善
+    setupMobileSwipe();
+    
+    // タッチ操作時に、ドキュメント全体に「swiping」クラスを追加して機材名カラムを固定
+    function setupMobileSwipe() {
+      // すでに保存されたスクロール位置があれば復元
+      if (savedScrollPosition.left > 0) {
         dateHeaders.scrollLeft = savedScrollPosition.left;
         timelines.forEach(timeline => {
           timeline.scrollLeft = savedScrollPosition.left;
         });
       }
-    } catch (error) {
-      console.error('モバイルスクロール設定エラー:', error);
+      
+      // 日付ヘッダーのタッチスタート時
+      dateHeaders.addEventListener('touchstart', function(e) {
+        if (e.touches.length !== 1) return; // マルチタッチは無視
+        
+        // スワイプ状態を記録
+        isSwiping = true;
+        document.body.classList.add('swiping');
+        
+        // タッチ開始位置
+        const startX = e.touches[0].clientX;
+        const startScrollLeft = dateHeaders.scrollLeft;
+        
+        // 機材名カラムにスワイプ固定クラスを追加
+        const itemCells = document.querySelectorAll('.gantt-item');
+        itemCells.forEach(cell => {
+          cell.classList.add('swipe-fixed');
+        });
+        
+        // タッチ移動時
+        function onTouchMove(moveEvent) {
+          if (!isSwiping) return;
+          
+          // 横スワイプのみ処理（縦スクロールは標準動作）
+          const dx = moveEvent.touches[0].clientX - startX;
+          const absDX = Math.abs(dx);
+          
+          // 横方向の移動が5px以上ある場合のみ処理（小さな動きは無視）
+          if (absDX > 5) {
+            // ブラウザのデフォルトスクロールを抑制
+            moveEvent.preventDefault();
+            
+            // スクロール位置を更新（スワイプと逆方向へ）
+            const newScrollLeft = startScrollLeft - dx;
+            
+            // 日付ヘッダーと全タイムラインのスクロール位置を同期
+            dateHeaders.scrollLeft = newScrollLeft;
+            timelines.forEach(timeline => {
+              timeline.scrollLeft = newScrollLeft;
+            });
+          }
+        }
+        
+        // タッチ終了時
+        function onTouchEnd() {
+          // スワイプ状態を解除
+          isSwiping = false;
+          document.body.classList.remove('swiping');
+          
+          // スワイプ終了時刻を記録（モーダル表示抑制用）
+          swipeEndTime = Date.now();
+          
+          // 機材名カラムからスワイプ固定クラスを削除
+          const itemCells = document.querySelectorAll('.gantt-item');
+          itemCells.forEach(cell => {
+            cell.classList.remove('swipe-fixed');
+          });
+          
+          // 横スクロール位置を保存
+          savedScrollPosition.left = dateHeaders.scrollLeft;
+          
+          // イベントリスナーを削除
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+        }
+        
+        // イベントリスナーを追加
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+      }, { passive: true });
+      
+      // タイムラインにも同様のタッチイベント処理を追加
+      timelines.forEach(timeline => {
+        timeline.addEventListener('touchstart', function(e) {
+          if (e.touches.length !== 1) return; // マルチタッチは無視
+          
+          // すでにスワイプ中なら処理しない
+          if (isSwiping) return;
+          
+          // スワイプ状態を記録
+          isSwiping = true;
+          document.body.classList.add('swiping');
+          
+          // タッチ開始位置
+          const startX = e.touches[0].clientX;
+          const startScrollLeft = timeline.scrollLeft;
+          
+          // 機材名カラムにスワイプ固定クラスを追加
+          const itemCells = document.querySelectorAll('.gantt-item');
+          itemCells.forEach(cell => {
+            cell.classList.add('swipe-fixed');
+          });
+          
+          // タッチ移動時
+          function onTouchMove(moveEvent) {
+            if (!isSwiping) return;
+            
+            // 横スワイプのみ処理
+            const dx = moveEvent.touches[0].clientX - startX;
+            const absDX = Math.abs(dx);
+            
+            if (absDX > 5) {
+              // ブラウザのデフォルトスクロールを抑制
+              moveEvent.preventDefault();
+              
+              // スクロール位置を更新
+              const newScrollLeft = startScrollLeft - dx;
+              
+              // 日付ヘッダーと全タイムラインのスクロール位置を同期
+              dateHeaders.scrollLeft = newScrollLeft;
+              timelines.forEach(tl => {
+                tl.scrollLeft = newScrollLeft;
+              });
+            }
+          }
+          
+          // タッチ終了時
+          function onTouchEnd() {
+            // スワイプ状態を解除
+            isSwiping = false;
+            document.body.classList.remove('swiping');
+            
+            // スワイプ終了時刻を記録
+            swipeEndTime = Date.now();
+            
+            // 機材名カラムからスワイプ固定クラスを削除
+            const itemCells = document.querySelectorAll('.gantt-item');
+            itemCells.forEach(cell => {
+              cell.classList.remove('swipe-fixed');
+            });
+            
+            // 横スクロール位置を保存
+            savedScrollPosition.left = timeline.scrollLeft;
+            
+            // イベントリスナーを削除
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+          }
+          
+          // イベントリスナーを追加
+          document.addEventListener('touchmove', onTouchMove, { passive: false });
+          document.addEventListener('touchend', onTouchEnd);
+        }, { passive: true });
+      });
     }
+    
+    console.log('モバイルスクロール同期設定完了');
+  } catch (error) {
+    console.error('モバイルスクロール設定エラー:', error);
   }
+}
 
   // 7. 日付ヘッダースクロールイベントハンドラ
   function onDateHeadersScroll(e) {
