@@ -768,14 +768,12 @@
     font-size: 36px !important; /* アイコンを2倍に */
   }
   
-  /* モバイルビュー用のスタイル修正 */
-.mobile-view .gantt-container {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* コンテナ全体のオーバーフローは非表示 */
-  height: auto !important; /* 高さを自動調整 */
-  max-height: 70vh; /* 画面の70%を最大高さとして設定 */
-}
+  /* モバイルビューでの特別な調整 */
+  body.mobile-view .gantt-container {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
   
   body.mobile-view .gantt-row {
     min-height: 60px;
@@ -959,108 +957,14 @@
     min-width: 44px;
   }
   
-  /* ヘッダーラッパー */
-.mobile-view .gantt-header-wrapper {
-  display: flex;
-  position: sticky;
-  top: 0;
-  background-color: white;
-  z-index: 20;
-  width: 100%;
-}
-  /* コンテンツラッパー */
-.mobile-view .gantt-content-wrapper {
-  display: flex;
-  overflow: hidden; /* 横スクロールはさせない */
-  width: 100%;
-  height: 100%;
-}
-/* 機材リスト列の固定 */
-.mobile-view .gantt-items-column {
-  position: sticky;
-  left: 0;
-  width: 30%; /* 機材リスト列の幅を固定 */
-  min-width: 130px; /* 最小幅を確保 */
-  overflow-y: auto; /* 縦スクロール可能 */
-  z-index: 10;
-  background-color: white; /* 背景を白にして下のコンテンツを隠す */
-  max-height: 100%;
-  border-right: 1px solid #ddd;
-}
-/* タイムライン列 */
-.mobile-view .gantt-timelines-column {
-  flex: 1;
-  overflow-x: auto; /* 横スクロール可能 */
-  overflow-y: auto; /* 縦スクロール可能 */
-  height: 100%;
-}
-
-/* 機材名ヘッダー固定 */
-.mobile-view .gantt-header .gantt-item {
-  position: sticky;
-  left: 0;
-  z-index: 20;
-  background-color: #f5f5f5;
-  width: 30%; /* 機材列の幅と同じ */
-  min-width: 130px; /* 機材列の最小幅と同じ */
-  border-right: 1px solid #ddd;
-}
-/* 日付ヘッダーのスクロール */
-.mobile-view .gantt-dates {
-  display: flex;
-  flex: 1;
-  overflow-x: auto;
-  background-color: #f5f5f5;
-}
-/* スクロール同期のための設定 */
-.mobile-view .gantt-dates::-webkit-scrollbar,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
-}
-
-.mobile-view .gantt-dates::-webkit-scrollbar-track,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.mobile-view .gantt-dates::-webkit-scrollbar-thumb,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-/* 日付ヘッダーと機材名ヘッダーの高さを同じにする */
-.mobile-view .gantt-header {
-  height: 40px;
-  line-height: 40px;
-  display: flex;
-  align-items: center;
-  font-weight: bold;
-  background-color: #f5f5f5;
-}
-
-/* 日付のセル */
-.mobile-view .gantt-date {
-  min-width: 80px; /* 日付の最小幅 */
-  text-align: center;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-right: 1px solid #ddd;
-}
-
-/* 機材アイテム */
-.mobile-view .gantt-item {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-  background-color: white;
-}
-
-/* タイムラインのスクロール同期 */
-.mobile-view .gantt-timeline {
-  min-height: 60px; /* タイムラインの最小高さ */
-  border-bottom: 1px solid #ddd;
-}
+  /* スクロール制御の改善 */
+  body.mobile-view .gantt-header-wrapper {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+  
   body.mobile-view .gantt-content-wrapper {
     display: flex;
     overflow: hidden;
@@ -1376,5 +1280,4 @@
     display: table;
     clear: both;
   }
-
 </style>
