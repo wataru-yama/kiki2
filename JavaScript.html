@@ -24,6 +24,8 @@
   let selectedLocation = '';
   let selectedEquipmentWithLocation = '';
   let initialDataLoaded = false; // 貸出データを取得する前に初期設定が完了しているかの変数
+  let isSwiping = false; // スワイプ中フラグ
+  let swipeEndTime = 0; // スワイプ終了時刻
   // スクロールフラグを追加
   let skipScrollToSelectedEquipment = false;
   // スクロール位置保存用
@@ -38,7 +40,9 @@
   // 設定変数
   let userSettings = {
     showConfirmDialog: true, // デフォルトは表示する
-    cellWidth: 80          // PCでのセル幅
+    swipeDelay: 500,        // スワイプ後のモーダル表示抑制時間（ミリ秒）
+    cellWidth: 80,          // PCでのセル幅
+    mobileCellWidth: 80     // モバイルでのセル幅
   };
   // 最後に削除された機器の復元用
   let lastDeletedEquipment = null;
@@ -70,6 +74,9 @@
     
     // カレンダーナビゲーションボタン追加
     setupCalendarNavigation();
+    
+    // モバイル向け特別設定
+    setupMobileEvents();
     
     // ユーザー認証チェック（最初に実行）
     checkAuthentication();
@@ -147,8 +154,60 @@
 	    document.addEventListener('mouseup', onMouseUp);
 	  }
 	  
+	  // タッチイベント用ハンドラ
+	  function handleTouchDrag(e) {
+	    // ヘッダー部分のタッチのみ処理
+	    let isHeaderElement = false;
+	    for (const selector of headerSelectors) {
+	      if (e.target.closest(selector)) {
+	        isHeaderElement = true;
+	        break;
+	      }
+	    }
+	    if (!isHeaderElement) return;
+	    
+	    // コンテナを取得
+	    const container = document.querySelector(containerSelector);
+	    if (!container) return;
+	    
+	    // タッチ開始位置とスクロール位置を保存
+	    const startX = e.touches[0].clientX;
+	    const startScrollLeft = container.scrollLeft;
+	    
+	    // ドラッグ中のスタイル
+	    e.target.closest(headerSelectors.join(',')).classList.add('dragging');
+	    
+	    // タッチ移動ハンドラ
+	    function onTouchMove(moveEvent) {
+	      moveEvent.preventDefault();
+	      
+	      // 移動距離からスクロール量を計算
+	      const dx = moveEvent.touches[0].clientX - startX;
+	      // スクロール位置を更新 (タッチと逆方向にスクロール)
+	      container.scrollLeft = startScrollLeft - dx;
+	    }
+	    
+	    // タッチ終了ハンドラ
+	    function onTouchEnd() {
+	      // ドラッグ中のスタイルを削除
+	      const dragElement = document.querySelector(headerSelectors.join(',') + '.dragging');
+	      if (dragElement) {
+	        dragElement.classList.remove('dragging');
+	      }
+	      
+	      // イベントリスナーを削除
+	      document.removeEventListener('touchmove', onTouchMove);
+	      document.removeEventListener('touchend', onTouchEnd);
+	    }
+	    
+	    // イベントリスナーを追加
+	    document.addEventListener('touchmove', onTouchMove, { passive: false });
+	    document.addEventListener('touchend', onTouchEnd);
+	  }
+	  
 	  // イベントリスナーを設定
 	  document.addEventListener('mousedown', handleMouseDrag);
+	  document.addEventListener('touchstart', handleTouchDrag, { passive: false });
 	  
 	  // 日付ヘッダーのドラッグスタイルを追加
 	  const styleElement = document.createElement('style');
@@ -234,6 +293,7 @@
             // データ取得を開始
             setupEventListeners();
             loadUserSettings();
+            setupMobileSupport();
             fetchAllData();
           } else {
             // 認証済みだが未登録ユーザー
@@ -324,6 +384,7 @@
   }
 
   // イベントリスナーの設定
+	// イベントリスナーの設定
   function setupEventListeners() {
     try {
       // 機器セレクタの変更イベント
@@ -345,6 +406,29 @@
         }, 1000);
       });
       
+      // モバイル向け機器セレクタの変更イベント
+      const mobileEquipmentSelect = document.getElementById('mobile-equipment-select');
+      if (mobileEquipmentSelect) {
+        // 古いイベントリスナーを削除
+        const clone = mobileEquipmentSelect.cloneNode(true);
+        mobileEquipmentSelect.parentNode.replaceChild(clone, mobileEquipmentSelect);
+        
+        // 新しいイベントリスナーを追加
+        clone.addEventListener('change', function(e) {
+          console.log('Mobile equipment select changed:', e.target.value);
+          selectedEquipmentWithLocation = e.target.value;
+          const parts = selectedEquipmentWithLocation.split('|');
+          selectedEquipment = parts[0]; // 機器管理番号部分
+          selectedLocation = parts[1] || ''; // 定置場所部分
+          updateGanttChart();
+          
+          // スクロール処理を確実に実行
+          setTimeout(() => {
+            scrollToSelectedEquipment();
+          }, 1000);
+        });
+      }
+      
       // 貸出モーダル保存ボタン
       document.getElementById('save-rental')?.addEventListener('click', saveRental);
       
@@ -362,6 +446,13 @@
             this.disabled = true;
           }
         }
+      });
+      
+      // モバイル向け本日ボタン
+      document.getElementById('mobile-view-today')?.addEventListener('click', function() {
+        startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+        updateGanttChart();
       });
       
       // 現場追加ボタン
@@ -385,261 +476,38 @@
         saveUserSettings();
       });
       
+      // PC表示ボタン
+      document.getElementById('toggle-pc-view')?.addEventListener('click', function() {
+        document.body.classList.remove('mobile-view');
+        updateMobileSettings();
+        // スクロール位置をリセット
+        savedScrollPosition = { top: 0, left: 0 };
+        updateGanttChart();
+      });
+      
+      // モバイル表示ボタン
+      document.getElementById('toggle-mobile-view')?.addEventListener('click', function() {
+        document.body.classList.add('mobile-view');
+        updateMobileSettings();
+        // スクロール位置をリセット
+        savedScrollPosition = { top: 0, left: 0 };
+        updateGanttChart();
+      });
+      
+      // モバイルのUndo
+      document.getElementById('mobile-menu-undo')?.addEventListener('click', function() {
+        const undoButton = document.getElementById('undo-button');
+        if (undoButton && !undoButton.disabled) {
+          undoButton.click();
+        }
+      });
+      
       // 管理ボタンを正しく設定
       setupManagementButtons();
       
       console.log('イベントリスナー設定完了');
     } catch (error) {
       console.error('イベントリスナー設定エラー:', error);
-    }
-  }
-  
-  // PC版マネージメントボタンのセットアップ
-  function setupManagementButtons() {
-    // 現場マスター管理ボタン
-    document.getElementById('manage-projects-btn')?.addEventListener('click', function() {
-      openProjectsModal();
-    });
-    
-    // 機器マスター管理ボタン
-    document.getElementById('manage-equipment-btn')?.addEventListener('click', function() {
-      openEquipmentModal();
-    });
-  }
-  
-  // PC版フォントサイズスライダーを追加
-  function setupPCFontSizeSlider() {
-    try {
-      const managementButtons = document.querySelector('.management-buttons');
-      if (!managementButtons) return;
-      
-      // スライダーのHTMLを作成
-      const sliderHTML = `
-        <div class="font-size-control-pc">
-          <label>文字サイズ:</label>
-          <input type="range" id="pc-font-size-slider" min="10" max="20" value="12">
-        </div>
-      `;
-      
-      // 管理ボタンエリアに追加
-      managementButtons.insertAdjacentHTML('beforeend', sliderHTML);
-      
-      // スライダーのイベントを設定
-      const slider = document.getElementById('pc-font-size-slider');
-      if (slider) {
-        // 初期値を設定
-        const savedSize = localStorage.getItem('fontSizePC');
-        if (savedSize) {
-          slider.value = savedSize;
-          document.documentElement.style.fontSize = savedSize + 'px';
-        }
-        
-        // スライダー変更イベント
-        slider.addEventListener('input', function() {
-          const size = this.value;
-          document.documentElement.style.fontSize = size + 'px';
-          localStorage.setItem('fontSizePC', size);
-        });
-      }
-    } catch (error) {
-      console.error('フォントサイズスライダー設定エラー:', error);
-    }
-  }
-  
-  // カレンダーナビゲーションボタンを追加
-  function setupCalendarNavigation() {
-    try {
-      const controlButtons = document.getElementById('control-buttons');
-      if (!controlButtons) return;
-      
-      // ナビゲーションボタンのHTMLを作成
-      const navigationHTML = `
-        <div class="calendar-navigation">
-          <button class="btn waves-effect waves-light" id="prev-month">
-            <i class="material-icons">keyboard_arrow_left</i>
-          </button>
-          <button class="btn waves-effect waves-light" id="prev-week">
-            <i class="material-icons">chevron_left</i>
-          </button>
-          <button class="btn waves-effect waves-light" id="today">
-            今日
-          </button>
-          <button class="btn waves-effect waves-light" id="next-week">
-            <i class="material-icons">chevron_right</i>
-          </button>
-          <button class="btn waves-effect waves-light" id="next-month">
-            <i class="material-icons">keyboard_arrow_right</i>
-          </button>
-        </div>
-      `;
-      
-      // 制御ボタンの後に追加
-      controlButtons.insertAdjacentHTML('afterend', navigationHTML);
-      
-      // ボタンのイベントを設定
-      document.getElementById('prev-month')?.addEventListener('click', function() {
-        const newDate = new Date(startDate);
-        newDate.setMonth(newDate.getMonth() - 1);
-        startDate = newDate;
-        updateGanttChart();
-      });
-      
-      document.getElementById('prev-week')?.addEventListener('click', function() {
-        const newDate = new Date(startDate);
-        newDate.setDate(newDate.getDate() - 7);
-        startDate = newDate;
-        updateGanttChart();
-      });
-      
-      document.getElementById('today')?.addEventListener('click', function() {
-        startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        updateGanttChart();
-      });
-      
-      document.getElementById('next-week')?.addEventListener('click', function() {
-        const newDate = new Date(startDate);
-        newDate.setDate(newDate.getDate() + 7);
-        startDate = newDate;
-        updateGanttChart();
-      });
-      
-      document.getElementById('next-month')?.addEventListener('click', function() {
-        const newDate = new Date(startDate);
-        newDate.setMonth(newDate.getMonth() + 1);
-        startDate = newDate;
-        updateGanttChart();
-      });
-    } catch (error) {
-      console.error('カレンダーナビゲーション設定エラー:', error);
-    }
-  }
-  
-  // 全データ取得関数
-  function fetchAllData() {
-    showLoading();
-    
-    // 機材リスト取得
-    getEquipmentList(); // ここから連鎖的に次のデータ取得を行う
-  }
-  
-  // ユーザー設定取得
-  function loadUserSettings() {
-    try {
-      const savedSettings = localStorage.getItem('userSettings');
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(savedSettings);
-        userSettings = { ...userSettings, ...parsedSettings };
-        
-        // 確認ダイアログの設定を反映
-        const checkbox = document.getElementById('confirm-dialog-checkbox');
-        if (checkbox) {
-          checkbox.checked = userSettings.showConfirmDialog;
-        }
-      }
-    } catch (error) {
-      console.error('ユーザー設定取得エラー:', error);
-    }
-  }
-  
-  // ユーザー設定保存
-  function saveUserSettings() {
-    try {
-      localStorage.setItem('userSettings', JSON.stringify(userSettings));
-    } catch (error) {
-      console.error('ユーザー設定保存エラー:', error);
-    }
-  }
-  
-  // 日付ピッカーの設定
-  function setupDatePickers() {
-    try {
-      const datePickerOptions = {
-        format: 'yyyy-mm-dd',
-        autoClose: true,
-        showClearBtn: false,
-        i18n: {
-          months: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
-          monthsShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
-          weekdays: ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'],
-          weekdaysShort: ['日', '月', '火', '水', '木', '金', '土'],
-          weekdaysAbbrev: ['日', '月', '火', '水', '木', '金', '土'],
-          cancel: 'キャンセル',
-          clear: 'クリア',
-          done: '選択'
-        }
-      };
-      
-      // 日付選択用
-      const datePickers = document.querySelectorAll('.datepicker');
-      M.Datepicker.init(datePickers, datePickerOptions);
-      
-      // カスタム日付ピッカー
-      const customDatePicker = document.getElementById('custom-date-picker');
-      if (customDatePicker) {
-        const instance = M.Datepicker.getInstance(customDatePicker);
-        if (!instance) {
-          const options = {
-            ...datePickerOptions,
-            defaultDate: startDate,
-            onSelect: (date) => {
-              startDate = date;
-              updateGanttChart();
-            }
-          };
-          M.Datepicker.init(customDatePicker, options);
-        }
-        
-        // カレンダーアイコンのクリックイベント
-        const calendarIcon = document.getElementById('calendar-trigger');
-        if (calendarIcon) {
-          calendarIcon.addEventListener('click', () => {
-            const instance = M.Datepicker.getInstance(customDatePicker);
-            if (instance) {
-              instance.open();
-            }
-          });
-        }
-      }
-      
-      // 数量コントロールも設定
-      setupQuantityControls();
-    } catch (error) {
-      console.error('日付ピッカー設定エラー:', error);
-    }
-  }
-  
-  // 数量コントロールのセットアップ
-  function setupQuantityControls() {
-    try {
-      // マイナスボタン
-      document.querySelectorAll('.quantity-btn.minus').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const input = this.parentNode.querySelector('input[type="number"]');
-          if (input) {
-            const value = parseInt(input.value, 10);
-            if (value > parseInt(input.min, 10)) {
-              input.value = value - 1;
-            }
-          }
-        });
-      });
-      
-      // プラスボタン
-      document.querySelectorAll('.quantity-btn.plus').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const input = this.parentNode.querySelector('input[type="number"]');
-          if (input) {
-            const value = parseInt(input.value, 10);
-            const max = parseInt(input.max, 10) || 999;
-            if (value < max) {
-              input.value = value + 1;
-            }
-          }
-        });
-      });
-    } catch (error) {
-      console.error('数量コントロール設定エラー:', error);
     }
   }
   
@@ -888,10 +756,12 @@
   function updateEquipmentSelect() {
     try {
       const select = document.getElementById('equipment-select');
+      const mobileSelect = document.getElementById('mobile-equipment-select');
       if (!select) return;
       
       // 既存の選択肢をクリア
       select.innerHTML = '<option value="" disabled selected>機材を選択してください</option>';
+      if (mobileSelect) mobileSelect.innerHTML = '<option value="" disabled selected>機材を選択してください</option>';
       
       // 機器ごとにグループ化
       const equipmentGroups = {};
@@ -936,12 +806,19 @@
           
           option.textContent = displayText;
           select.appendChild(option);
+          
+          // モバイル用も同様
+          if (mobileSelect) {
+            const mobileOption = option.cloneNode(true);
+            mobileSelect.appendChild(mobileOption);
+          }
         });
       });
       
       // MaterializeのSelectを初期化
       try {
         M.FormSelect.init(select);
+        if (mobileSelect) M.FormSelect.init(mobileSelect);
       } catch (e) {
         console.error('セレクト初期化エラー:', e);
       }
@@ -950,55 +827,92 @@
     }
   }
   
-  // 1. updateGanttChart関数の修正 - PCに特化した実装
+  // 1. updateGanttChart関数の修正 - ガントチャートの高さ調整と無限スクロール対応
   function updateGanttChart() {
-    try {
-      showLoading();
-      console.log('ガントチャート更新開始');
-      
-      // 選択中の機材と定置場所の情報を保存
-      saveCurrentSelection();
-      
-      // 表示する日数を拡張（より多くの日付を表示）
-      let endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 60); // 60日分表示に拡張
-      
-      // 日付配列作成
-      const days = [];
-      const tempDate = new Date(startDate);
-      while (tempDate < endDate) {
-        days.push(new Date(tempDate));
-        tempDate.setDate(tempDate.getDate() + 1);
-      }
-      
+  try {
+    showLoading();
+    console.log('ガントチャート更新開始');
+    
+    // 選択中の機材と定置場所の情報を保存
+    saveCurrentSelection();
+    
+    // 表示する日数を拡張（より多くの日付を表示）
+    let endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 60); // 60日分表示に拡張
+    
+    // 日付配列作成
+    const days = [];
+    const tempDate = new Date(startDate);
+    while (tempDate < endDate) {
+      days.push(new Date(tempDate));
+      tempDate.setDate(tempDate.getDate() + 1);
+    }
+    
+    // モバイル対応のためのレイアウト変更
+    if (document.body.classList.contains('mobile-view')) {
+      // モバイルレイアウトの作成
+      createMobileLayout(days);
+    } else {
       // PC向けレイアウトの作成
       createDesktopLayout(days);
-      
-      // ガントチャートの高さを調整
-      adjustGanttHeight();
-      
-      // 日付スライダーを追加
-      setupDateSlider();
-      
-      hideLoading();
-      
-      // 選択中の機材までスクロール
-      if (!skipScrollToSelectedEquipment) {
-        scrollToSelectedEquipment();
-      }
-    } catch (error) {
-      console.error('ガントチャート更新エラー:', error);
-      hideLoading();
-      alert('ガントチャートの更新中にエラーが発生しました: ' + error);
     }
-  }
-  
-  // ガントチャートの高さを調整する関数の修正版 - PCに特化した実装
-  function adjustGanttHeight() {
-    const ganttContainer = document.querySelector('.gantt-container');
-    if (!ganttContainer) return;
     
-    // PC版の場合
+    // ガントチャートの高さを調整
+    adjustGanttHeight();
+    
+    // 日付スライダーを追加
+    setupDateSlider();
+    
+    hideLoading();
+    
+    // 選択中の機材までスクロール
+    if (!skipScrollToSelectedEquipment) {
+      scrollToSelectedEquipment();
+    }
+    
+    // モバイルでのスクロール同期設定
+    setTimeout(() => {
+      setupMobileScroll();
+    }, 200);
+  } catch (error) {
+    console.error('ガントチャート更新エラー:', error);
+    hideLoading();
+    alert('ガントチャートの更新中にエラーが発生しました: ' + error);
+  }
+}
+	
+	// ガントチャートの高さを調整する関数の修正版
+function adjustGanttHeight() {
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (!ganttContainer) return;
+  
+  // モバイルビューの場合
+  if (document.body.classList.contains('mobile-view')) {
+    // ビューポートの高さを取得
+    const viewportHeight = window.innerHeight;
+    
+    // ヘッダーやコントロール部分の高さを考慮
+    const headerHeight = document.querySelector('.mobile-menu')?.offsetHeight || 0;
+    const dateDisplayHeight = document.querySelector('.date-display-area')?.offsetHeight || 0;
+    const otherElementsHeight = 80; // その他の要素のマージンなど
+    
+    // 利用可能な高さを計算
+    const availableHeight = viewportHeight - headerHeight - dateDisplayHeight - otherElementsHeight;
+    
+    // 高さを設定（最小値も確保）
+    const containerHeight = Math.max(300, availableHeight);
+    ganttContainer.style.maxHeight = `${containerHeight}px`;
+    
+    // 内部の要素高さも調整
+    const contentWrapper = document.querySelector('.gantt-content-wrapper');
+    if (contentWrapper) {
+      contentWrapper.style.height = `${containerHeight - dateDisplayHeight - 40}px`; // ヘッダーの高さも引く
+    }
+    
+    // スクロール初期設定
+    setupMobileScroll();
+  } else {
+    // PC版の場合は元の処理
     const ganttRows = document.querySelector('#gantt-rows');
     if (!ganttRows) return;
     
@@ -1020,73 +934,7 @@
       ganttContainer.style.overflowY = 'auto';
     }
   }
-  
-  // 日付スライダー設定関数
-  function setupDateSlider() {
-    try {
-      // 既存のスライダーコンテナを取得または作成
-      let sliderContainer = document.querySelector('.date-slider-container');
-      
-      if (!sliderContainer) {
-        // コンテナが存在しない場合は作成
-        sliderContainer = document.createElement('div');
-        sliderContainer.className = 'date-slider-container';
-        
-        const ganttContainer = document.querySelector('.gantt-container');
-        if (ganttContainer) {
-          ganttContainer.parentNode.insertBefore(sliderContainer, ganttContainer);
-        }
-      }
-      
-      // スライダーコンテナのHTMLを設定
-      sliderContainer.innerHTML = `
-        <div class="date-slider-label" id="date-slider-start">${formatDate(startDate)}</div>
-        <input type="range" id="date-slider" value="0" min="0" max="100">
-        <div class="date-slider-label" id="date-slider-end">${formatDate(new Date(startDate.getTime() + 59 * 24 * 60 * 60 * 1000))}</div>
-        <button class="date-slider-today" id="slider-today-btn">
-          <i class="material-icons">today</i>今日
-        </button>
-      `;
-      
-      // 今日ボタンのイベント
-      document.getElementById('slider-today-btn')?.addEventListener('click', function() {
-        startDate = new Date();
-        startDate.setHours(0, 0, 0, 0);
-        updateGanttChart();
-      });
-      
-      // スライダーのイベント
-      const slider = document.getElementById('date-slider');
-      if (slider) {
-        slider.addEventListener('input', function() {
-          const progress = parseFloat(this.value) / 100;
-          
-          // 日付ヘッダーと同期スクロール
-          const dateHeaders = document.getElementById('date-headers');
-          if (dateHeaders) {
-            const maxScroll = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-            dateHeaders.scrollLeft = maxScroll * progress;
-          }
-        });
-      }
-      
-      // 日付ヘッダーのスクロールイベントとスライダーを同期
-      const dateHeaders = document.getElementById('date-headers');
-      if (dateHeaders) {
-        dateHeaders.addEventListener('scroll', function() {
-          const slider = document.getElementById('date-slider');
-          if (slider) {
-            const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-            if (scrollWidth > 0) {
-              slider.value = (dateHeaders.scrollLeft / scrollWidth) * 100;
-            }
-          }
-        });
-      }
-    } catch (error) {
-      console.error('日付スライダー設定エラー:', error);
-    }
-  }
+}
   
   // 選択機材へのスクロール調整
   function scrollToSelectedEquipment() {
@@ -1109,19 +957,24 @@
         // 選択した機材の行要素を検索
         let element = null;
         
-        // PC表示の場合
-        element = document.querySelector(`.gantt-row[data-equipment-id="${equipmentId}"][data-location="${location}"]`);
-        
-        // セレクタが見つからない場合は別の方法で検索
-        if (!element) {
-          console.log('Trying alternative selector');
-          // 全ての行を取得してIDを比較
-          const rows = document.querySelectorAll('.gantt-row');
-          for (const row of rows) {
-            if (row.dataset.equipmentId === equipmentId && 
-                (row.dataset.location || '') === location) {
-              element = row;
-              break;
+        if (document.body.classList.contains('mobile-view')) {
+          // モバイル表示の場合
+          element = document.querySelector(`.gantt-item[data-equipment-id="${equipmentId}"][data-location="${location}"]`);
+        } else {
+          // PC表示の場合
+          element = document.querySelector(`.gantt-row[data-equipment-id="${equipmentId}"][data-location="${location}"]`);
+          
+          // セレクタが見つからない場合は別の方法で検索
+          if (!element) {
+            console.log('Trying alternative selector');
+            // 全ての行を取得してIDを比較
+            const rows = document.querySelectorAll('.gantt-row');
+            for (const row of rows) {
+              if (row.dataset.equipmentId === equipmentId && 
+                  (row.dataset.location || '') === location) {
+                element = row;
+                break;
+              }
             }
           }
         }
@@ -1165,965 +1018,772 @@
     }, 800); // 遅延時間を長めに設定（800ms）
   }
   
-  // PC向けレイアウト作成関数
-  function createDesktopLayout(days) {
-    // ガントチャートコンテナを取得
-    const ganttContainer = document.querySelector('.gantt-container');
-    if (!ganttContainer) return;
+  // モバイル向けレイアウトの作成を修正
+function createMobileLayout(days) {
+  // ガントチャートコンテナを取得
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (!ganttContainer) return;
+  
+  // コンテナをクリア
+  ganttContainer.innerHTML = '';
+  
+  // 日付表示エリアを必ず最初に追加
+  const dateDisplay = document.createElement('div');
+  dateDisplay.className = 'date-display-area';
+  dateDisplay.textContent = `${formatDate(days[0])} 〜 ${formatDate(days[days.length - 1])}`;
+  dateDisplay.style.display = 'block';
+  dateDisplay.style.visibility = 'visible';
+  dateDisplay.style.margin = '10px 0';
+  dateDisplay.style.padding = '10px';
+  dateDisplay.style.backgroundColor = '#f5f5f5';
+  dateDisplay.style.borderRadius = '4px';
+  dateDisplay.style.fontWeight = 'bold';
+  dateDisplay.style.fontSize = '1.1em';
+  dateDisplay.style.zIndex = '10';
+  
+  ganttContainer.appendChild(dateDisplay);
+  
+  // モバイルレイアウト用の構造を作成
+  const headerWrapper = document.createElement('div');
+  headerWrapper.className = 'gantt-header-wrapper';
+  
+  // 機材名ヘッダー
+  const headerItem = document.createElement('div');
+  headerItem.className = 'gantt-item gantt-header';
+  headerItem.textContent = '機材名';
+  headerWrapper.appendChild(headerItem);
+  
+  // 日付ヘッダー
+  const dateHeaders = document.createElement('div');
+  dateHeaders.className = 'gantt-dates gantt-header';
+  
+  // 日付ヘッダーに日付を追加
+  days.forEach(day => {
+    const header = document.createElement('div');
+    header.className = 'gantt-date';
+    header.textContent = formatDate(day, 'MM/dd');
+    dateHeaders.appendChild(header);
+  });
+  
+  headerWrapper.appendChild(dateHeaders);
+  ganttContainer.appendChild(headerWrapper);
+  
+  // コンテンツラッパー
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'gantt-content-wrapper';
+  
+  // 機材リスト列
+  const itemsColumn = document.createElement('div');
+  itemsColumn.className = 'gantt-items-column';
+  
+  // タイムライン列
+  const timelinesColumn = document.createElement('div');
+  timelinesColumn.className = 'gantt-timelines-column';
+  
+  // 選択中の機器+定置場所の情報を取得
+  let selectedPlaceInfo = null;
+  if (selectedEquipmentWithLocation) {
+    const parts = selectedEquipmentWithLocation.split('|');
+    if (parts.length > 1) {
+      selectedPlaceInfo = {
+        id: parts[0],
+        location: parts[1] || ''
+      };
+    }
+  }
+  
+  // 機材をあいうえお順に並べ替え
+  const sortedEquipmentList = [...equipmentList]
+    .filter(item => (parseInt(item['総台数']) || 0) > 0) // 台数が0の場合は表示しない
+    .sort((a, b) => {
+      if (!a['機器名称']) return 1;
+      if (!b['機器名称']) return -1;
+      return String(a['機器名称']).localeCompare(String(b['機器名称']), 'ja');
+    });
+
+  // すべての機材を表示対象とする
+  const displayEquipment = sortedEquipmentList;
+  
+  // 表示対象が存在しない場合
+  if (displayEquipment.length === 0) {
+    const emptyRow = document.createElement('div');
+    emptyRow.className = 'gantt-row';
+    emptyRow.style.height = '100px';
     
-    // コンテナをクリア
-    ganttContainer.innerHTML = '';
+    const emptyMessage = document.createElement('div');
+    emptyMessage.className = 'gantt-item center-align';
+    emptyMessage.style.width = '100%';
+    emptyMessage.style.padding = '20px';
+    emptyMessage.style.color = '#666';
+    emptyMessage.textContent = '表示する機材がありません。機材マスターから機材を追加してください。';
     
-    // 日付ヘッダー行
-    const headerRow = document.createElement('div');
-    headerRow.className = 'gantt-row gantt-header';
+    emptyRow.appendChild(emptyMessage);
+    itemsColumn.appendChild(emptyRow);
+    contentWrapper.appendChild(itemsColumn);
+    contentWrapper.appendChild(timelinesColumn);
+    ganttContainer.appendChild(contentWrapper);
     
-    // 機材名ヘッダー
-    const headerItem = document.createElement('div');
-    headerItem.className = 'gantt-item';
-    headerItem.textContent = '機材名';
-    headerRow.appendChild(headerItem);
+    return;
+  }
+  
+  // 機材リストと対応するタイムラインを作成
+  displayEquipment.forEach(item => {
+    if (!item['機器管理番号']) return;
     
-    // 日付ヘッダー
-    const dateHeaders = document.createElement('div');
-    dateHeaders.className = 'gantt-dates';
-    dateHeaders.id = 'date-headers';
-    dateHeaders.style.overflowX = 'auto'; // 横スクロール可能に
+    const equipmentId = item['機器管理番号'];
+    const location = item['定置場所'] || '';
     
-    // 日付ヘッダーに日付を追加
-    days.forEach(day => {
-      const header = document.createElement('div');
-      header.className = 'gantt-date';
-      header.textContent = formatDate(day, 'MM/dd');
-      dateHeaders.appendChild(header);
+    // 現在選択中の機器+定置場所かどうかチェック
+    const isSelected = selectedPlaceInfo && 
+                      String(equipmentId) === String(selectedPlaceInfo.id) && 
+                      String(location) === String(selectedPlaceInfo.location);
+    
+    // 機材名セル
+    const nameCell = document.createElement('div');
+    nameCell.className = 'gantt-item';
+    if (isSelected) nameCell.classList.add('selected-equipment');
+
+    const infoContainer = document.createElement('div');
+    infoContainer.className = 'equipment-info';
+
+    // 機材名と機器管理番号
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'equipment-name';
+    nameDiv.textContent = `${item['機器名称']} (${equipmentId})`;
+    infoContainer.appendChild(nameDiv);
+    
+    // 定置場所
+    if (item['定置場所']) {
+      const locationDiv = document.createElement('div');
+      locationDiv.className = 'equipment-location';
+      locationDiv.textContent = `${item['定置場所']}`;
+      infoContainer.appendChild(locationDiv);
+    }
+    
+    // 在庫台数
+    const stockDiv = document.createElement('div');
+    stockDiv.className = 'equipment-stock';
+    stockDiv.textContent = `在庫台数: ${item['総台数'] || 0}台`;
+    infoContainer.appendChild(stockDiv);
+    
+    nameCell.appendChild(infoContainer);
+    nameCell.dataset.equipmentId = equipmentId;
+    nameCell.dataset.location = location;
+    
+    // 行を機材列に追加
+    itemsColumn.appendChild(nameCell);
+    
+    // タイムライン作成
+    const timeline = document.createElement('div');
+    timeline.className = 'gantt-timeline';
+    timeline.style.display = 'flex';
+    timeline.style.position = 'relative';
+    timeline.style.flex = '1';
+    timeline.dataset.equipment = equipmentId;
+    timeline.dataset.location = location;
+    
+    // マウスダウンイベント設定
+    timeline.addEventListener('mousedown', onTimelineMouseDown);
+    
+    // 日付セル作成
+    days.forEach((day, index) => {
+      const dayCell = document.createElement('div');
+      dayCell.className = 'gantt-day';
+      dayCell.dataset.date = formatDate(day);
+      dayCell.dataset.equipment = equipmentId;
+      dayCell.dataset.location = location;
+      dayCell.dataset.index = index;
+      timeline.appendChild(dayCell);
     });
     
-    // 日付ヘッダーにスクロールイベントリスナーを追加（同期スクロール用）
-    dateHeaders.addEventListener('scroll', function() {
-      const timelines = document.querySelectorAll('.gantt-timeline');
-      timelines.forEach(timeline => {
-        timeline.scrollLeft = dateHeaders.scrollLeft;
-      });
+    // 機器と定置場所が一致する貸出だけを表示
+    const myRentals = rentalData.filter(rental => {
+      if (!rental) return false;
       
-      // スライダーとも同期
-      const slider = document.getElementById('date-slider');
-      if (slider) {
-        const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
-        if (scrollWidth > 0) {
-          slider.value = (dateHeaders.scrollLeft / scrollWidth) * 100;
-        }
-      }
+      const rentalEquipId = String(rental['機器管理番号'] || '');
+      const targetEquipId = String(equipmentId || '');
+      const equipMatch = (rentalEquipId === targetEquipId);
+      
+      const rentalLocation = String(rental['貸出元'] || '');
+      const targetLocation = String(location || '');
+      const locationMatch = (rentalLocation === targetLocation);
+      
+      const isActive = rental['ステータス'] !== '返却済み' || !rental['返却日'];
+      
+      return equipMatch && locationMatch && isActive;
     });
     
-    headerRow.appendChild(dateHeaders);
-    ganttContainer.appendChild(headerRow);
-    
-    // 行コンテナ
-    const ganttRows = document.createElement('div');
-    ganttRows.id = 'gantt-rows';
-    ganttRows.style.overflowY = 'auto'; // 縦スクロール可能に
-    ganttContainer.appendChild(ganttRows);
-    
-    // 選択中の機器+定置場所の情報を取得
-    let selectedPlaceInfo = null;
-    if (selectedEquipmentWithLocation) {
-      const parts = selectedEquipmentWithLocation.split('|');
-      if (parts.length > 1) {
-        selectedPlaceInfo = {
-          id: parts[0],
-          location: parts[1] || ''
+    // 貸出が複数ある場合に重ならないように処理する
+    if (myRentals.length > 0) {
+      // 貸出を日付範囲に変換
+      const rentalRanges = myRentals.map(rental => {
+        let startDay = parseDate(rental['借用開始日']);
+        let endDay = parseDate(rental['借用終了日']);
+        
+        if (!startDay || !endDay) return null;
+        
+        startDay.setHours(0, 0, 0, 0);
+        endDay.setHours(0, 0, 0, 0);
+        
+        return {
+          rental: rental,
+          startDay: startDay,
+          endDay: endDay,
+          layer: null
         };
-      }
-    }
-    
-    // 機材をあいうえお順に並べ替え
-    const sortedEquipmentList = [...equipmentList]
-      .filter(item => (parseInt(item['総台数']) || 0) > 0) // 台数が0の場合は表示しない
-      .sort((a, b) => {
-        if (!a['機器名称']) return 1;
-        if (!b['機器名称']) return -1;
-        return String(a['機器名称']).localeCompare(String(b['機器名称']), 'ja');
-      });
-
-    // すべての機材を表示対象とする
-    const displayEquipment = sortedEquipmentList;
-    
-    // 表示対象が存在しない場合
-    if (displayEquipment.length === 0) {
-      const emptyRow = document.createElement('div');
-      emptyRow.className = 'gantt-row';
-      emptyRow.style.height = '100px';
+      }).filter(range => range !== null);
       
-      const emptyMessage = document.createElement('div');
-      emptyMessage.className = 'gantt-item center-align';
-      emptyMessage.style.width = '100%';
-      emptyMessage.style.padding = '20px';
-      emptyMessage.style.color = '#666';
-      emptyMessage.textContent = '表示する機材がありません。機材マスターから機材を追加してください。';
+      // 表示範囲を考慮
+      const rangeStart = new Date(days[0]);
+      const rangeEnd = new Date(days[days.length - 1]);
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd.setHours(23, 59, 59, 999);
       
-      emptyRow.appendChild(emptyMessage);
-      ganttRows.appendChild(emptyRow);
+      // 貸出を日付順にソート
+      rentalRanges.sort((a, b) => a.startDay.getTime() - b.startDay.getTime());
       
-      return;
-    }
-    
-    // 各機材の行を作成
-    displayEquipment.forEach(item => {
-      if (!item['機器管理番号']) return;
+      // 各貸出に表示レイヤーを割り当て
+      const layers = [];
       
-      const equipmentId = item['機器管理番号'];
-      const location = item['定置場所'] || '';
-      
-      // 行作成
-      const row = document.createElement('div');
-      row.className = 'gantt-row';
-      row.dataset.equipmentId = equipmentId;
-      row.dataset.location = location;
-      
-      // 現在選択中の機器+定置場所かどうかチェック
-      const isSelected = selectedPlaceInfo && 
-                        String(equipmentId) === String(selectedPlaceInfo.id) && 
-                        String(location) === String(selectedPlaceInfo.location);
-      
-      if (isSelected) {
-        row.classList.add('selected-equipment');
-      }
-      
-      // 機材名セル
-      const nameCell = document.createElement('div');
-      nameCell.className = 'gantt-item';
-
-      const infoContainer = document.createElement('div');
-      infoContainer.className = 'equipment-info';
-
-      // 機材名と機器管理番号
-      const nameDiv = document.createElement('div');
-      nameDiv.className = 'equipment-name';
-      nameDiv.textContent = `${item['機器名称']} (${equipmentId})`;
-      infoContainer.appendChild(nameDiv);
-      
-      // 定置場所
-      if (item['定置場所']) {
-        const locationDiv = document.createElement('div');
-        locationDiv.className = 'equipment-location';
-        locationDiv.textContent = `${item['定置場所']}`;
-        infoContainer.appendChild(locationDiv);
-      }
-      
-      // 在庫台数
-      const stockDiv = document.createElement('div');
-      stockDiv.className = 'equipment-stock';
-      stockDiv.textContent = `在庫台数: ${item['総台数'] || 0}台`;
-      infoContainer.appendChild(stockDiv);
-      
-      // 追加情報: 仕様
-      if (item['仕様']) {
-        addDetailLine(infoContainer, '仕様', item['仕様']);
-      }
-      
-      // 追加情報: 型番
-      if (item['型番']) {
-        addDetailLine(infoContainer, '型番', item['型番']);
-      }
-      
-      // 追加情報: メーカー
-      if (item['メーカー']) {
-        addDetailLine(infoContainer, 'メーカー', item['メーカー']);
-      }
-      
-      // 追加情報: 備考1
-      if (item['備考1']) {
-        addDetailLine(infoContainer, '備考1', item['備考1']);
-      }
-      
-      // 追加情報: 備考2
-      if (item['備考2']) {
-        addDetailLine(infoContainer, '備考2', item['備考2']);
-      }
-      
-      nameCell.appendChild(infoContainer);
-
-      if (isSelected) {
-        nameCell.style.backgroundColor = '#e3f2fd';
-      }
-
-      row.appendChild(nameCell);
-      
-      // タイムライン作成
-      const timeline = document.createElement('div');
-      timeline.className = 'gantt-timeline';
-      timeline.style.position = 'relative';
-      timeline.style.flex = '1';
-      timeline.dataset.equipment = equipmentId;
-      timeline.dataset.location = location;
-      
-      // 横スクロールバーを表示しない（スクロールは親要素と同期）
-      timeline.style.overflowX = 'hidden';
-      
-      // マウスホイールを無効化してスクロール同期を維持
-      timeline.addEventListener('wheel', function(e) {
-        if (e.shiftKey) {
-          e.preventDefault();
-          const dateHeaders = document.querySelector('#date-headers');
-          if (dateHeaders) {
-            dateHeaders.scrollLeft += e.deltaY;
-          }
-        }
-      });
-      
-      // マウスダウンイベント設定
-      timeline.addEventListener('mousedown', onTimelineMouseDown);
-      
-      // 日付セル作成
-      days.forEach((day, index) => {
-        const dayCell = document.createElement('div');
-        dayCell.className = 'gantt-day';
-        dayCell.dataset.date = formatDate(day);
-        dayCell.dataset.equipment = equipmentId;
-        dayCell.dataset.location = location;
-        dayCell.dataset.index = index;
-        timeline.appendChild(dayCell);
-      });
-      
-      // 機器と定置場所が一致する貸出だけを表示
-      const myRentals = rentalData.filter(rental => {
-        if (!rental) return false;
+      // 各貸出に対してレイヤーを割り当てる
+      rentalRanges.forEach(rentalRange => {
+        let assignedLayer = false;
         
-        const rentalEquipId = String(rental['機器管理番号'] || '');
-        const targetEquipId = String(equipmentId || '');
-        const equipMatch = (rentalEquipId === targetEquipId);
-        
-        const rentalLocation = String(rental['貸出元'] || '');
-        const targetLocation = String(location || '');
-        const locationMatch = (rentalLocation === targetLocation);
-        
-        const isActive = rental['ステータス'] !== '返却済み' || !rental['返却日'];
-        
-        return equipMatch && locationMatch && isActive;
-      });
-      
-      // 貸出が複数ある場合に重ならないように処理する
-      if (myRentals.length > 0) {
-        // 貸出を日付範囲に変換
-        const rentalRanges = myRentals.map(rental => {
-          let startDay = parseDate(rental['借用開始日']);
-          let endDay = parseDate(rental['借用終了日']);
+        for (let i = 0; i < layers.length; i++) {
+          let hasConflict = false;
           
-          if (!startDay || !endDay) return null;
-          
-          startDay.setHours(0, 0, 0, 0);
-          endDay.setHours(0, 0, 0, 0);
-          
-          return {
-            rental: rental,
-            startDay: startDay,
-            endDay: endDay,
-            layer: null
-          };
-        }).filter(range => range !== null);
-        
-        // 表示範囲を考慮
-        const rangeStart = new Date(days[0]);
-        const rangeEnd = new Date(days[days.length - 1]);
-        rangeStart.setHours(0, 0, 0, 0);
-        rangeEnd.setHours(23, 59, 59, 999);
-        
-        // 貸出を日付順にソート
-        rentalRanges.sort((a, b) => a.startDay.getTime() - b.startDay.getTime());
-        
-        // 各貸出に表示レイヤーを割り当て
-        const layers = [];
-        
-        // 各貸出に対してレイヤーを割り当てる
-        rentalRanges.forEach(rentalRange => {
-          let assignedLayer = false;
-          
-          for (let i = 0; i < layers.length; i++) {
-            let hasConflict = false;
-            
-            for (const existingRange of layers[i]) {
-              if (!(rentalRange.endDay < existingRange.startDay || 
-                   rentalRange.startDay > existingRange.endDay)) {
-                hasConflict = true;
-                break;
-              }
-            }
-            
-            if (!hasConflict) {
-              layers[i].push(rentalRange);
-              rentalRange.layer = i;
-              assignedLayer = true;
+          for (const existingRange of layers[i]) {
+            if (!(rentalRange.endDay < existingRange.startDay || 
+                 rentalRange.startDay > existingRange.endDay)) {
+              hasConflict = true;
               break;
             }
           }
           
-          if (!assignedLayer) {
-            layers.push([rentalRange]);
-            rentalRange.layer = layers.length - 1;
+          if (!hasConflict) {
+            layers[i].push(rentalRange);
+            rentalRange.layer = i;
+            assignedLayer = true;
+            break;
           }
-        });
+        }
         
-        // レイヤー数に基づいて行の高さを調整（最低2つのレイヤーを確保）
-        const layerCount = Math.max(2, layers.length);
-        row.style.height = (layerCount * 40) + 'px';
-        timeline.style.height = (layerCount * 40) + 'px';
-        
-        // 各貸出バーを作成
-        rentalRanges.forEach(rentalRange => {
-          try {
-            const rental = rentalRange.rental;
-            const startDay = rentalRange.startDay;
-            const endDay = rentalRange.endDay;
-            const layer = rentalRange.layer;
+        if (!assignedLayer) {
+          layers.push([rentalRange]);
+          rentalRange.layer = layers.length - 1;
+        }
+      });
+      
+      // レイヤー数に基づいて行の高さを調整
+      const layerCount = Math.max(2, layers.length);
+      timeline.style.height = (layerCount * 40) + 'px';
+      
+      // 各貸出バーを作成
+      rentalRanges.forEach(rentalRange => {
+        try {
+          const rental = rentalRange.rental;
+          const startDay = rentalRange.startDay;
+          const endDay = rentalRange.endDay;
+          const layer = rentalRange.layer;
+          
+          // 範囲外なら表示しない
+          if (endDay < rangeStart || startDay > rangeEnd) return;
+          
+          // バーの日付範囲
+          let visibleStartDay = startDay < rangeStart ? rangeStart : startDay;
+          let visibleEndDay = endDay > rangeEnd ? rangeEnd : endDay;
+          
+          // インデックスを計算
+          let startIdx = -1;
+          let endIdx = -1;
+          
+          for (let i = 0; i < days.length; i++) {
+            const currentDay = new Date(days[i]);
+            currentDay.setHours(0, 0, 0, 0);
             
-            // 範囲外なら表示しない
-            if (endDay < rangeStart || startDay > rangeEnd) return;
-            
-            // バーの日付範囲
-            let visibleStartDay = startDay < rangeStart ? rangeStart : startDay;
-            let visibleEndDay = endDay > rangeEnd ? rangeEnd : endDay;
-            
-            // インデックスを計算
-            let startIdx = -1;
-            let endIdx = -1;
-            
-            for (let i = 0; i < days.length; i++) {
-              const currentDay = new Date(days[i]);
-              currentDay.setHours(0, 0, 0, 0);
-              
-              if (startIdx === -1 && visibleStartDay.getTime() <= currentDay.getTime()) {
-                startIdx = i;
-              }
-              
-              if (visibleEndDay.getTime() >= currentDay.getTime()) {
-                endIdx = i;
-              }
+            if (startIdx === -1 && visibleStartDay.getTime() <= currentDay.getTime()) {
+              startIdx = i;
             }
             
-            // インデックスチェック
-            if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
-            
-            // セル幅を取得
-            const cellWidth = userSettings.cellWidth || 80;
-            
-            const width = ((endIdx - startIdx) + 1) * cellWidth;
-            const left = startIdx * cellWidth;
-            const top = layer * 40;
-            
-            // バー要素作成
-            const bar = document.createElement('div');
-            bar.className = 'rental-bar';
-            bar.style.position = 'absolute';
-            bar.style.left = left + 'px';
-            bar.style.top = top + 'px';
-            bar.style.width = width + 'px';
-            bar.style.height = '30px';
-            bar.style.borderRadius = '3px';
-            bar.style.color = 'white';
-            bar.style.padding = '5px 30px 5px 5px';
-            bar.style.fontSize = '12px';
-            bar.style.zIndex = '10';
-            bar.style.cursor = 'pointer';
-            bar.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-            bar.style.overflow = 'hidden';
-            bar.style.textOverflow = 'ellipsis';
-            bar.style.whiteSpace = 'nowrap';
-
-            // バーデータとテキスト
-            bar.dataset.rentalId = rental['登録日時'] ? rental['登録日時'].toString() : '';
-            bar.dataset.layer = layer;
-            bar.dataset.location = location;
-
-            bar.textContent = `${rental['数量']}台-${rental['使用場所']}(${getUserDisplayName(rental['借用者'])})`;
-            
-            // 定置場所と使用場所に基づいて色を決定
-            if (location && rental['使用場所'] && location === rental['使用場所']) {
-              // 同じ場所の場合は緑色
-              bar.style.backgroundColor = '#26a69a';
-            } else {
-              // 異なる場所の場合はオレンジ色
-              bar.style.backgroundColor = '#ff9800';
+            if (visibleEndDay.getTime() >= currentDay.getTime()) {
+              endIdx = i;
             }
-
-            // ドラッグ＆リサイズ機能を有効化
-            enableBarDragAndResize(bar, rental);
-
-            // タイムラインに追加
-            timeline.appendChild(bar);
-          } catch (error) {
-            console.error('貸出バー作成エラー:', error);
           }
-        });
-      }
-      
-      row.appendChild(timeline);
-      ganttRows.appendChild(row);
-    });
-  }
-  
-  // 詳細行を追加するヘルパー関数
-  function addDetailLine(container, label, value) {
-    if (!value) return;
-    
-    const detailLine = document.createElement('div');
-    detailLine.className = 'equipment-detail';
-    detailLine.textContent = `${label}: ${value}`;
-    container.appendChild(detailLine);
-  }
-  
-  // ユーザー表示名の取得関数
-  function getUserDisplayName(email) {
-    if (!email) return '';
-    
-    // @より前の部分を取得
-    const username = email.split('@')[0];
-    return username;
-  }
-  
-  // バーのドラッグ＆リサイズ機能を有効化
-  function enableBarDragAndResize(bar, rental) {
-    if (!bar || !rental) return;
-    
-    // 編集可能クラスを追加
-    bar.classList.add('editable');
-    
-    // 左リサイズハンドル（ドラッグで開始日を変更）
-    const leftHandle = document.createElement('div');
-    leftHandle.className = 'resize-handle left-handle';
-    leftHandle.style.position = 'absolute';
-    leftHandle.style.top = '0';
-    leftHandle.style.left = '0';
-    leftHandle.style.width = '20px';
-    leftHandle.style.height = '100%';
-    leftHandle.style.cursor = 'ew-resize';
-    
-    // 右リサイズハンドル（ドラッグで終了日を変更）
-    const rightHandle = document.createElement('div');
-    rightHandle.className = 'resize-handle right-handle';
-    rightHandle.style.position = 'absolute';
-    rightHandle.style.top = '0';
-    rightHandle.style.right = '0';
-    rightHandle.style.width = '20px';
-    rightHandle.style.height = '100%';
-    rightHandle.style.cursor = 'ew-resize';
-    
-    // 返却ボタン
-    const returnButton = document.createElement('button');
-    returnButton.className = 'btn-floating btn-small red return-button';
-    returnButton.innerHTML = '<i class="material-icons">keyboard_return</i>';
-    returnButton.title = '返却';
-    
-    // 返却ボタンのクリックイベント
-    returnButton.addEventListener('click', (e) => {
-      e.stopPropagation(); // バーのクリックイベントを発生させない
-      showReturnModal(rental);
-    });
-    
-    // バーにハンドルを追加
-    bar.appendChild(leftHandle);
-    bar.appendChild(rightHandle);
-    bar.appendChild(returnButton);
-    
-    // バークリックイベント
-    bar.addEventListener('click', function(e) {
-      // ハンドルをクリックした場合は無視（ハンドルは別のリスナーで処理）
-      if (e.target.classList.contains('resize-handle') || e.target.classList.contains('return-button')) {
-        return;
-      }
-      
-      // クリックしたバーにある返却ボタンを使って返却モーダルを表示
-      showReturnModal(rental);
-    });
-    
-    // ドラッグ関連変数
-    let startX;
-    let startLeft;
-    let startWidth;
-    let dragMode = null; // 'move', 'resize-start', 'resize-end'
-    let timeline;
-    
-    // 左ハンドルマウスダウン（開始日変更）
-    leftHandle.addEventListener('mousedown', function(e) {
-      e.stopPropagation();
-      dragMode = 'resize-start';
-      startResize(e);
-    });
-    
-    // 右ハンドルマウスダウン（終了日変更）
-    rightHandle.addEventListener('mousedown', function(e) {
-      e.stopPropagation();
-      dragMode = 'resize-end';
-      startResize(e);
-    });
-    
-    // バー本体マウスダウン（移動）
-    bar.addEventListener('mousedown', function(e) {
-      // ハンドルまたは返却ボタンをクリックした場合は無視
-      if (e.target.classList.contains('resize-handle') || 
-          e.target === returnButton || 
-          e.target.closest('.return-button')) {
-        return;
-      }
-      
-      e.stopPropagation();
-      dragMode = 'move';
-      startDrag(e);
-    });
-    
-    // リサイズ開始
-    function startResize(e) {
-      if (isResizingBar || isDraggingBar) return;
-      e.preventDefault();
-      
-      isResizingBar = true;
-      startX = e.clientX;
-      startLeft = parseInt(bar.style.left, 10);
-      startWidth = parseInt(bar.style.width, 10);
-      timeline = bar.closest('.gantt-timeline');
-      
-      // ドラッグ中のスタイル調整
-      bar.classList.add('resizing');
-      
-      // リサイズ中のグローバル変数を設定
-      dragBarElement = bar;
-      dragBarData = {
-        startX: startX,
-        startLeft: startLeft,
-        startWidth: startWidth,
-        timeline: timeline,
-        rental: rental,
-        mode: dragMode
-      };
-      
-      // グローバルイベントリスナーを追加
-      document.addEventListener('mousemove', onResizeMove);
-      document.addEventListener('mouseup', onResizeEnd);
-    }
-    
-    // ドラッグ開始
-    function startDrag(e) {
-      if (isDraggingBar || isResizingBar) return;
-      e.preventDefault();
-      
-      isDraggingBar = true;
-      startX = e.clientX;
-      startLeft = parseInt(bar.style.left, 10);
-      timeline = bar.closest('.gantt-timeline');
-      
-      // ドラッグ中のスタイル調整
-      bar.classList.add('dragging');
-      
-      // ドラッグ中のグローバル変数を設定
-      dragBarElement = bar;
-      dragBarData = {
-        startX: startX,
-        startLeft: startLeft,
-        timeline: timeline,
-        rental: rental,
-        mode: 'move'
-      };
-      
-      // ドラッグ開始位置を保存（元に戻す場合用）
-      dragBarOriginalPosition = {
-        left: startLeft,
-        width: parseInt(bar.style.width, 10)
-      };
-      
-      // グローバルイベントリスナーを追加
-      document.addEventListener('mousemove', onDragMove);
-      document.addEventListener('mouseup', onDragEnd);
-    }
-  }
-  
-  // リサイズ移動時のハンドラ（グローバルイベント）
-  function onResizeMove(e) {
-    if (!isResizingBar || !dragBarElement || !dragBarData) return;
-    e.preventDefault();
-    
-    const bar = dragBarElement;
-    const startX = dragBarData.startX;
-    const startLeft = dragBarData.startLeft;
-    const startWidth = dragBarData.startWidth;
-    const timeline = dragBarData.timeline;
-    const resizeMode = dragBarData.mode;
-    
-    // マウス移動量
-    const deltaX = e.clientX - startX;
-    
-    // セル幅を取得
-    const cellWidth = userSettings.cellWidth || 80;
-    
-    // タイムラインの日付セルを取得
-    const dateCells = Array.from(timeline.querySelectorAll('.gantt-day'));
-    if (dateCells.length === 0) return;
-    
-    // グリッドにスナップするためのステップ計算
-    const step = cellWidth;
-    
-    if (resizeMode === 'resize-start') {
-      // 左側リサイズ処理
-      
-      // 新しい左位置
-      const newLeft = startLeft + Math.round(deltaX / step) * step;
-      
-      // 最小幅を確保（1セル）
-      const minWidth = 1 * step;
-      
-      // 新しい幅計算
-      const newWidth = startWidth - (newLeft - startLeft);
-      
-      // 最小幅を下回る場合は位置を調整
-      if (newWidth < minWidth) {
-        bar.style.left = `${startLeft + startWidth - minWidth}px`;
-        bar.style.width = `${minWidth}px`;
-      } else {
-        bar.style.left = `${newLeft}px`;
-        bar.style.width = `${newWidth}px`;
-      }
-    } else if (resizeMode === 'resize-end') {
-      // 右側リサイズ処理
-      
-      // 新しい幅
-      const newWidth = startWidth + Math.round(deltaX / step) * step;
-      
-      // 最小幅を確保（1セル）
-      const minWidth = 1 * step;
-      
-      // 幅を設定
-      bar.style.width = `${Math.max(newWidth, minWidth)}px`;
-    }
-  }
-  
-  // リサイズ終了時のハンドラ
-  function onResizeEnd(e) {
-    if (!isResizingBar || !dragBarElement || !dragBarData) return;
-    e.preventDefault();
-    
-    // グローバルイベントリスナーを削除
-    document.removeEventListener('mousemove', onResizeMove);
-    document.removeEventListener('mouseup', onResizeEnd);
-    
-    const bar = dragBarElement;
-    const timeline = dragBarData.timeline;
-    const rental = dragBarData.rental;
-    const resizeMode = dragBarData.mode;
-    
-    // リサイズ中のスタイルを削除
-    bar.classList.remove('resizing');
-    
-    // バーの位置とサイズを取得
-    const barLeft = parseInt(bar.style.left, 10);
-    const barWidth = parseInt(bar.style.width, 10);
-    
-    // セル幅を取得
-    const cellWidth = userSettings.cellWidth || 80;
-    
-    // タイムラインの日付セルを取得
-    const dateCells = Array.from(timeline.querySelectorAll('.gantt-day'));
-    if (dateCells.length === 0) {
-      // リセット
-      isResizingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // 左端からのセルインデックスを計算
-    const startCellIndex = Math.floor(barLeft / cellWidth);
-    const endCellIndex = Math.floor((barLeft + barWidth - 1) / cellWidth);
-    
-    // インデックスが範囲内かチェック
-    if (startCellIndex < 0 || startCellIndex >= dateCells.length || 
-        endCellIndex < 0 || endCellIndex >= dateCells.length) {
-      // 範囲外なので元に戻す
-      if (dragBarOriginalPosition) {
-        bar.style.left = `${dragBarOriginalPosition.left}px`;
-        bar.style.width = `${dragBarOriginalPosition.width}px`;
-      }
-      
-      // リセット
-      isResizingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // 変更前の日付
-    const originalStartDate = parseDate(rental['借用開始日']);
-    const originalEndDate = parseDate(rental['借用終了日']);
-    
-    // 変更後の日付
-    let newStartDate = null;
-    let newEndDate = null;
-    
-    try {
-      // 対応するセルから日付を取得
-      const startCell = dateCells[startCellIndex];
-      const endCell = dateCells[endCellIndex];
-      
-      if (startCell && endCell) {
-        newStartDate = startCell.dataset.date;
-        newEndDate = endCell.dataset.date;
-      }
-    } catch (error) {
-      console.error('日付取得エラー:', error);
-      
-      // 元の位置に戻す
-      if (dragBarOriginalPosition) {
-        bar.style.left = `${dragBarOriginalPosition.left}px`;
-        bar.style.width = `${dragBarOriginalPosition.width}px`;
-      }
-      
-      // リセット
-      isResizingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // リセット
-    isResizingBar = false;
-    dragBarElement = null;
-    dragBarData = null;
-    
-    // 日付が変更されたかチェック
-    const isStartDateChanged = formatDate(originalStartDate) !== newStartDate;
-    const isEndDateChanged = formatDate(originalEndDate) !== newEndDate;
-    
-    if (!isStartDateChanged && !isEndDateChanged) {
-      return; // 変更なし
-    }
-    
-    // 確認ダイアログ
-    if (userSettings.showConfirmDialog) {
-      let message = '';
-      if (resizeMode === 'resize-start') {
-        message = `借用開始日を「${newStartDate}」に変更しますか？`;
-      } else if (resizeMode === 'resize-end') {
-        message = `借用終了日を「${newEndDate}」に変更しますか？`;
-      }
-      
-      if (!confirm(message)) {
-        // 元の位置に戻す
-        if (dragBarOriginalPosition) {
-          bar.style.left = `${dragBarOriginalPosition.left}px`;
-          bar.style.width = `${dragBarOriginalPosition.width}px`;
-        }
-        return;
-      }
-    }
-    
-    // 貸出データ変更
-    updateRentalDates(rental, newStartDate, newEndDate);
-  }
-  
-  // ドラッグ移動時のハンドラ（グローバルイベント）
-  function onDragMove(e) {
-    if (!isDraggingBar || !dragBarElement || !dragBarData) return;
-    e.preventDefault();
-    
-    const bar = dragBarElement;
-    const startX = dragBarData.startX;
-    const startLeft = dragBarData.startLeft;
-    const timeline = dragBarData.timeline;
-    
-    // マウス移動量
-    const deltaX = e.clientX - startX;
-    
-    // セル幅を取得
-    const cellWidth = userSettings.cellWidth || 80;
-    
-    // グリッドにスナップするためのステップ計算
-    const step = cellWidth;
-    
-    // 新しい左位置
-    const newLeft = startLeft + Math.round(deltaX / step) * step;
-    
-    // 範囲チェック
-    const timelineWidth = timeline.scrollWidth;
-    const barWidth = parseInt(bar.style.width, 10);
-    
-    if (newLeft < 0) {
-      bar.style.left = '0px';
-    } else if (newLeft + barWidth > timelineWidth) {
-      bar.style.left = `${timelineWidth - barWidth}px`;
-    } else {
-      bar.style.left = `${newLeft}px`;
-    }
-  }
-  
-  // ドラッグ終了時のハンドラ
-  function onDragEnd(e) {
-    if (!isDraggingBar || !dragBarElement || !dragBarData) return;
-    e.preventDefault();
-    
-    // グローバルイベントリスナーを削除
-    document.removeEventListener('mousemove', onDragMove);
-    document.removeEventListener('mouseup', onDragEnd);
-    
-    const bar = dragBarElement;
-    const timeline = dragBarData.timeline;
-    const rental = dragBarData.rental;
-    
-    // ドラッグ中のスタイルを削除
-    bar.classList.remove('dragging');
-    
-    // バーの位置とサイズを取得
-    const barLeft = parseInt(bar.style.left, 10);
-    const barWidth = parseInt(bar.style.width, 10);
-    
-    // セル幅を取得
-    const cellWidth = userSettings.cellWidth || 80;
-    
-    // タイムラインの日付セルを取得
-    const dateCells = Array.from(timeline.querySelectorAll('.gantt-day'));
-    if (dateCells.length === 0) {
-      // リセット
-      isDraggingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // 左端からのセルインデックスを計算
-    const startCellIndex = Math.floor(barLeft / cellWidth);
-    const endCellIndex = Math.floor((barLeft + barWidth - 1) / cellWidth);
-    
-    // インデックスが範囲内かチェック
-    if (startCellIndex < 0 || startCellIndex >= dateCells.length || 
-        endCellIndex < 0 || endCellIndex >= dateCells.length) {
-      // 範囲外なので元に戻す
-      if (dragBarOriginalPosition) {
-        bar.style.left = `${dragBarOriginalPosition.left}px`;
-        bar.style.width = `${dragBarOriginalPosition.width}px`;
-      }
-      
-      // リセット
-      isDraggingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // 変更前の日付
-    const originalStartDate = parseDate(rental['借用開始日']);
-    
-    // 変更後の日付
-    let newStartDate = null;
-    let newEndDate = null;
-    
-    try {
-      // 対応するセルから日付を取得
-      const startCell = dateCells[startCellIndex];
-      const endCell = dateCells[endCellIndex];
-      
-      if (startCell && endCell) {
-        newStartDate = startCell.dataset.date;
-        newEndDate = endCell.dataset.date;
-      }
-    } catch (error) {
-      console.error('日付取得エラー:', error);
-      
-      // 元の位置に戻す
-      if (dragBarOriginalPosition) {
-        bar.style.left = `${dragBarOriginalPosition.left}px`;
-        bar.style.width = `${dragBarOriginalPosition.width}px`;
-      }
-      
-      // リセット
-      isDraggingBar = false;
-      dragBarElement = null;
-      dragBarData = null;
-      return;
-    }
-    
-    // リセット
-    isDraggingBar = false;
-    dragBarElement = null;
-    dragBarData = null;
-    
-    // 開始日が変更されたかチェック
-    if (formatDate(originalStartDate) === newStartDate) {
-      return; // 変更なし
-    }
-    
-    // 確認ダイアログ
-    if (userSettings.showConfirmDialog) {
-      const message = `借用期間を「${newStartDate}」から「${newEndDate}」に変更しますか？`;
-      if (!confirm(message)) {
-        // 元の位置に戻す
-        if (dragBarOriginalPosition) {
-          bar.style.left = `${dragBarOriginalPosition.left}px`;
-          bar.style.width = `${dragBarOriginalPosition.width}px`;
-        }
-        return;
-      }
-    }
-    
-    // 貸出データ変更
-    updateRentalDates(rental, newStartDate, newEndDate);
-  }
-  
-  // 貸出日付を更新
-  function updateRentalDates(rental, newStartDate, newEndDate) {
-    try {
-      // データ準備
-      const data = {
-        rentalId: rental['登録日時'] ? rental['登録日時'].toString() : '',
-        startDate: newStartDate,
-        endDate: newEndDate
-      };
-      
-      if (!data.rentalId) {
-        console.error('貸出IDがありません');
-        return;
-      }
-      
-      // 位置情報を保存
-      saveScrollPosition();
-      
-      // 保存API実行
-      showLoading();
-      google.script.run
-        .withSuccessHandler(function(response) {
-          if (response && response.success) {
-            // 成功処理
-            console.log('日付更新成功:', response);
-            
-            // Undoスタック追加
-            undoStack.push({
-              action: 'undoRentalDates',
-              id: rental['登録日時'].toString(),
-              oldStartDate: formatDate(rental['借用開始日']),
-              oldEndDate: formatDate(rental['借用終了日'])
-            });
-            
-            // Undoボタン有効化
-            const undoButton = document.getElementById('undo-button');
-            if (undoButton) undoButton.disabled = false;
-            
-            // データ再読み込み
-            getRentalData();
+          
+          // インデックスチェック
+          if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
+          
+          // セル幅を取得（モバイルかPCかで異なる）
+          const cellWidth = document.body.classList.contains('mobile-view') ? 
+                          (userSettings.mobileCellWidth || 80) : 
+                          (userSettings.cellWidth || 80);
+          
+          const width = ((endIdx - startIdx) + 1) * cellWidth;
+          const left = startIdx * cellWidth;
+          const top = layer * 40;
+          
+          // バー要素作成
+          const bar = document.createElement('div');
+          bar.className = 'rental-bar';
+          bar.style.position = 'absolute';
+          bar.style.left = left + 'px';
+          bar.style.top = top + 'px';
+          bar.style.width = width + 'px';
+          bar.style.height = '30px'; // モバイルでも同じ高さに統一
+          bar.style.borderRadius = '3px';
+          bar.style.color = 'white';
+          bar.style.padding = '5px 10px'; // パディングを調整
+          bar.style.fontSize = '14px'; // フォントサイズを調整
+          bar.style.zIndex = '10';
+          bar.style.cursor = 'pointer';
+          bar.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+          bar.style.overflow = 'hidden';
+          bar.style.textOverflow = 'ellipsis';
+          bar.style.whiteSpace = 'nowrap';
+
+          // バーデータとテキスト
+          bar.dataset.rentalId = rental['登録日時'] ? rental['登録日時'].toString() : '';
+          bar.dataset.layer = layer;
+          bar.dataset.location = location;
+
+          bar.textContent = `${rental['数量']}台-${rental['使用場所']}(${getUserDisplayName(rental['借用者'])})`;
+          
+          // 定置場所と使用場所に基づいて色を決定
+          if (location && rental['使用場所'] && location === rental['使用場所']) {
+            // 同じ場所の場合は緑色
+            bar.style.backgroundColor = '#26a69a';
           } else {
-            // 失敗処理
-            hideLoading();
-            console.error('日付更新失敗:', response);
-            alert('更新に失敗しました: ' + (response ? response.error : '不明なエラー'));
-            updateGanttChart();
+            // 異なる場所の場合はオレンジ色
+            bar.style.backgroundColor = '#ff9800';
           }
-        })
-        .withFailureHandler(function(error) {
-          hideLoading();
-          console.error('日付更新エラー:', error);
-          alert('更新に失敗しました: ' + error);
-          updateGanttChart();
-        })
-        .updateRentalDates(data);
-    } catch (error) {
-      console.error('貸出日付更新エラー:', error);
-      alert('貸出日付更新でエラーが発生しました: ' + error);
+
+          // ドラッグ＆リサイズ機能を有効化
+          enableBarDragAndResize(bar, rental);
+
+          // タイムラインに追加
+          timeline.appendChild(bar);
+        } catch (error) {
+          console.error('貸出バー作成エラー:', error);
+        }
+      });
+    }
+    
+    // タイムラインをタイムライン列に追加
+    timelinesColumn.appendChild(timeline);
+  });
+  
+  // 要素を追加
+  contentWrapper.appendChild(itemsColumn);
+  contentWrapper.appendChild(timelinesColumn);
+  ganttContainer.appendChild(contentWrapper);
+  
+  // モバイルデバイスの場合、カレンダーのスワイプ機能を設定
+  if (document.body.classList.contains('mobile-view') && 
+      ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+    setupCalendarSwipe();
+  }
+  
+  // スクロール同期機能を設定
+  setupMobileScroll();
+}
+  
+  // createDesktopLayout関数の完全なコード
+function createDesktopLayout(days) {
+  // ガントチャートコンテナを取得
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (!ganttContainer) return;
+  
+  // コンテナをクリア
+  ganttContainer.innerHTML = '';
+  
+  // 日付ヘッダー行
+  const headerRow = document.createElement('div');
+  headerRow.className = 'gantt-row gantt-header';
+  
+  // 機材名ヘッダー
+  const headerItem = document.createElement('div');
+  headerItem.className = 'gantt-item';
+  headerItem.textContent = '機材名';
+  headerRow.appendChild(headerItem);
+  
+  // 日付ヘッダー
+  const dateHeaders = document.createElement('div');
+  dateHeaders.className = 'gantt-dates';
+  dateHeaders.id = 'date-headers';
+  dateHeaders.style.overflowX = 'auto'; // 横スクロール可能に
+  
+  // 日付ヘッダーに日付を追加
+  days.forEach(day => {
+    const header = document.createElement('div');
+    header.className = 'gantt-date';
+    header.textContent = formatDate(day, 'MM/dd');
+    dateHeaders.appendChild(header);
+  });
+  
+  // 日付ヘッダーにスクロールイベントリスナーを追加（同期スクロール用）
+  dateHeaders.addEventListener('scroll', function() {
+    const timelines = document.querySelectorAll('.gantt-timeline');
+    timelines.forEach(timeline => {
+      timeline.scrollLeft = dateHeaders.scrollLeft;
+    });
+    
+    // スライダーとも同期
+    const slider = document.getElementById('date-slider');
+    if (slider) {
+      const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
+      if (scrollWidth > 0) {
+        slider.value = (dateHeaders.scrollLeft / scrollWidth) * 100;
+      }
+    }
+  });
+  
+  headerRow.appendChild(dateHeaders);
+  ganttContainer.appendChild(headerRow);
+  
+  // 行コンテナ
+  const ganttRows = document.createElement('div');
+  ganttRows.id = 'gantt-rows';
+  ganttRows.style.overflowY = 'auto'; // 縦スクロール可能に
+  ganttContainer.appendChild(ganttRows);
+  
+  // 選択中の機器+定置場所の情報を取得
+  let selectedPlaceInfo = null;
+  if (selectedEquipmentWithLocation) {
+    const parts = selectedEquipmentWithLocation.split('|');
+    if (parts.length > 1) {
+      selectedPlaceInfo = {
+        id: parts[0],
+        location: parts[1] || ''
+      };
     }
   }
+  
+  // 機材をあいうえお順に並べ替え
+  const sortedEquipmentList = [...equipmentList]
+    .filter(item => (parseInt(item['総台数']) || 0) > 0) // 台数が0の場合は表示しない
+    .sort((a, b) => {
+      if (!a['機器名称']) return 1;
+      if (!b['機器名称']) return -1;
+      return String(a['機器名称']).localeCompare(String(b['機器名称']), 'ja');
+    });
+
+  // すべての機材を表示対象とする
+  const displayEquipment = sortedEquipmentList;
+  
+  // 表示対象が存在しない場合
+  if (displayEquipment.length === 0) {
+    const emptyRow = document.createElement('div');
+    emptyRow.className = 'gantt-row';
+    emptyRow.style.height = '100px';
+    
+    const emptyMessage = document.createElement('div');
+    emptyMessage.className = 'gantt-item center-align';
+    emptyMessage.style.width = '100%';
+    emptyMessage.style.padding = '20px';
+    emptyMessage.style.color = '#666';
+    emptyMessage.textContent = '表示する機材がありません。機材マスターから機材を追加してください。';
+    
+    emptyRow.appendChild(emptyMessage);
+    ganttRows.appendChild(emptyRow);
+    
+    return;
+  }
+  
+  // 各機材の行を作成
+  displayEquipment.forEach(item => {
+    if (!item['機器管理番号']) return;
+    
+    const equipmentId = item['機器管理番号'];
+    const location = item['定置場所'] || '';
+    
+    // 行作成
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+    row.dataset.equipmentId = equipmentId;
+    row.dataset.location = location;
+    
+    // 現在選択中の機器+定置場所かどうかチェック
+    const isSelected = selectedPlaceInfo && 
+                      String(equipmentId) === String(selectedPlaceInfo.id) && 
+                      String(location) === String(selectedPlaceInfo.location);
+    
+    if (isSelected) {
+      row.classList.add('selected-equipment');
+    }
+    
+    // 機材名セル
+    const nameCell = document.createElement('div');
+    nameCell.className = 'gantt-item';
+
+    const infoContainer = document.createElement('div');
+    infoContainer.className = 'equipment-info';
+
+    // 機材名と機器管理番号
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'equipment-name';
+    nameDiv.textContent = `${item['機器名称']} (${equipmentId})`;
+    infoContainer.appendChild(nameDiv);
+    
+    // 定置場所
+    if (item['定置場所']) {
+      const locationDiv = document.createElement('div');
+      locationDiv.className = 'equipment-location';
+      locationDiv.textContent = `${item['定置場所']}`;
+      infoContainer.appendChild(locationDiv);
+    }
+    
+    // 在庫台数
+    const stockDiv = document.createElement('div');
+    stockDiv.className = 'equipment-stock';
+    stockDiv.textContent = `在庫台数: ${item['総台数'] || 0}台`;
+    infoContainer.appendChild(stockDiv);
+    
+    // 追加情報: 仕様
+    if (item['仕様']) {
+      addDetailLine(infoContainer, '仕様', item['仕様']);
+    }
+    
+    // 追加情報: 型番
+    if (item['型番']) {
+      addDetailLine(infoContainer, '型番', item['型番']);
+    }
+    
+    // 追加情報: メーカー
+    if (item['メーカー']) {
+      addDetailLine(infoContainer, 'メーカー', item['メーカー']);
+    }
+    
+    // 追加情報: 備考1
+    if (item['備考1']) {
+      addDetailLine(infoContainer, '備考1', item['備考1']);
+    }
+    
+    // 追加情報: 備考2
+    if (item['備考2']) {
+      addDetailLine(infoContainer, '備考2', item['備考2']);
+    }
+    
+    nameCell.appendChild(infoContainer);
+
+    if (isSelected) {
+      nameCell.style.backgroundColor = '#e3f2fd';
+    }
+
+    row.appendChild(nameCell);
+    
+    // タイムライン作成
+    const timeline = document.createElement('div');
+    timeline.className = 'gantt-timeline';
+    timeline.style.position = 'relative';
+    timeline.style.flex = '1';
+    timeline.dataset.equipment = equipmentId;
+    timeline.dataset.location = location;
+    
+    // 横スクロールバーを表示しない（スクロールは親要素と同期）
+    timeline.style.overflowX = 'hidden';
+    
+    // マウスホイールを無効化してスクロール同期を維持
+    timeline.addEventListener('wheel', function(e) {
+      if (e.shiftKey) {
+        e.preventDefault();
+        const dateHeaders = document.querySelector('#date-headers');
+        if (dateHeaders) {
+          dateHeaders.scrollLeft += e.deltaY;
+        }
+      }
+    });
+    
+    // マウスダウンイベント設定
+    timeline.addEventListener('mousedown', onTimelineMouseDown);
+    
+    // 日付セル作成
+    days.forEach((day, index) => {
+      const dayCell = document.createElement('div');
+      dayCell.className = 'gantt-day';
+      dayCell.dataset.date = formatDate(day);
+      dayCell.dataset.equipment = equipmentId;
+      dayCell.dataset.location = location;
+      dayCell.dataset.index = index;
+      timeline.appendChild(dayCell);
+    });
+    
+    // 機器と定置場所が一致する貸出だけを表示
+    const myRentals = rentalData.filter(rental => {
+      if (!rental) return false;
+      
+      const rentalEquipId = String(rental['機器管理番号'] || '');
+      const targetEquipId = String(equipmentId || '');
+      const equipMatch = (rentalEquipId === targetEquipId);
+      
+      const rentalLocation = String(rental['貸出元'] || '');
+      const targetLocation = String(location || '');
+      const locationMatch = (rentalLocation === targetLocation);
+      
+      const isActive = rental['ステータス'] !== '返却済み' || !rental['返却日'];
+      
+      return equipMatch && locationMatch && isActive;
+    });
+    
+    // 貸出が複数ある場合に重ならないように処理する
+    if (myRentals.length > 0) {
+      // 貸出を日付範囲に変換
+      const rentalRanges = myRentals.map(rental => {
+        let startDay = parseDate(rental['借用開始日']);
+        let endDay = parseDate(rental['借用終了日']);
+        
+        if (!startDay || !endDay) return null;
+        
+        startDay.setHours(0, 0, 0, 0);
+        endDay.setHours(0, 0, 0, 0);
+        
+        return {
+          rental: rental,
+          startDay: startDay,
+          endDay: endDay,
+          layer: null
+        };
+      }).filter(range => range !== null);
+      
+      // 表示範囲を考慮
+      const rangeStart = new Date(days[0]);
+      const rangeEnd = new Date(days[days.length - 1]);
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd.setHours(23, 59, 59, 999);
+      
+      // 貸出を日付順にソート
+      rentalRanges.sort((a, b) => a.startDay.getTime() - b.startDay.getTime());
+      
+      // 各貸出に表示レイヤーを割り当て
+      const layers = [];
+      
+      // 各貸出に対してレイヤーを割り当てる
+      rentalRanges.forEach(rentalRange => {
+        let assignedLayer = false;
+        
+        for (let i = 0; i < layers.length; i++) {
+          let hasConflict = false;
+          
+          for (const existingRange of layers[i]) {
+            if (!(rentalRange.endDay < existingRange.startDay || 
+                 rentalRange.startDay > existingRange.endDay)) {
+              hasConflict = true;
+              break;
+            }
+          }
+          
+          if (!hasConflict) {
+            layers[i].push(rentalRange);
+            rentalRange.layer = i;
+            assignedLayer = true;
+            break;
+          }
+        }
+        
+        if (!assignedLayer) {
+          layers.push([rentalRange]);
+          rentalRange.layer = layers.length - 1;
+        }
+      });
+      
+      // レイヤー数に基づいて行の高さを調整（最低2つのレイヤーを確保）
+      const layerCount = Math.max(2, layers.length);
+      row.style.height = (layerCount * 40) + 'px';
+      timeline.style.height = (layerCount * 40) + 'px';
+      
+      // 各貸出バーを作成
+      rentalRanges.forEach(rentalRange => {
+        try {
+          const rental = rentalRange.rental;
+          const startDay = rentalRange.startDay;
+          const endDay = rentalRange.endDay;
+          const layer = rentalRange.layer;
+          
+          // 範囲外なら表示しない
+          if (endDay < rangeStart || startDay > rangeEnd) return;
+          
+          // バーの日付範囲
+          let visibleStartDay = startDay < rangeStart ? rangeStart : startDay;
+          let visibleEndDay = endDay > rangeEnd ? rangeEnd : endDay;
+          
+          // インデックスを計算
+          let startIdx = -1;
+          let endIdx = -1;
+          
+          for (let i = 0; i < days.length; i++) {
+            const currentDay = new Date(days[i]);
+            currentDay.setHours(0, 0, 0, 0);
+            
+            if (startIdx === -1 && visibleStartDay.getTime() <= currentDay.getTime()) {
+              startIdx = i;
+            }
+            
+            if (visibleEndDay.getTime() >= currentDay.getTime()) {
+              endIdx = i;
+            }
+          }
+          
+          // インデックスチェック
+          if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) return;
+          
+          // セル幅を取得（モバイルかPCかで異なる）
+          const cellWidth = document.body.classList.contains('mobile-view') ? 
+                          (userSettings.mobileCellWidth || 80) : 
+                          (userSettings.cellWidth || 80);
+          
+          const width = ((endIdx - startIdx) + 1) * cellWidth;
+          const left = startIdx * cellWidth;
+          const top = layer * 40;
+          
+          // バー要素作成
+          const bar = document.createElement('div');
+          bar.className = 'rental-bar';
+          bar.style.position = 'absolute';
+          bar.style.left = left + 'px';
+          bar.style.top = top + 'px';
+          bar.style.width = width + 'px';
+          bar.style.height = '30px';
+          bar.style.borderRadius = '3px';
+          bar.style.color = 'white';
+          bar.style.padding = '5px 30px 5px 5px';
+          bar.style.fontSize = '12px';
+          bar.style.zIndex = '10';
+          bar.style.cursor = 'pointer';
+          bar.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+          bar.style.overflow = 'hidden';
+          bar.style.textOverflow = 'ellipsis';
+          bar.style.whiteSpace = 'nowrap';
+
+          // バーデータとテキスト
+          bar.dataset.rentalId = rental['登録日時'] ? rental['登録日時'].toString() : '';
+          bar.dataset.layer = layer;
+          bar.dataset.location = location;
+
+          bar.textContent = `${rental['数量']}台-${rental['使用場所']}(${getUserDisplayName(rental['借用者'])})`;
+          
+          // 定置場所と使用場所に基づいて色を決定
+          if (location && rental['使用場所'] && location === rental['使用場所']) {
+            // 同じ場所の場合は緑色
+            bar.style.backgroundColor = '#26a69a';
+          } else {
+            // 異なる場所の場合はオレンジ色
+            bar.style.backgroundColor = '#ff9800';
+          }
+
+          // ドラッグ＆リサイズ機能を有効化
+          enableBarDragAndResize(bar, rental);
+
+          // タイムラインに追加
+          timeline.appendChild(bar);
+        } catch (error) {
+          console.error('貸出バー作成エラー:', error);
+        }
+      });
+    }
+    
+    row.appendChild(timeline);
+    ganttRows.appendChild(row);
+  });
+}
   
   // 現在の選択状態を保存
   function saveCurrentSelection() {
@@ -2275,8 +1935,10 @@
       const cells = Array.from(timeline.querySelectorAll('.gantt-day'));
       if (cells.length === 0) return;
       
-      // セル幅を取得
-      const cellWidth = userSettings.cellWidth || 80;
+      // セル幅を取得（モバイルかPCかで異なる）
+      const cellWidth = document.body.classList.contains('mobile-view') ? 
+                      (userSettings.mobileCellWidth || 80) : 
+                      (userSettings.cellWidth || 80);
       
       const timelineRect = timeline.getBoundingClientRect();
       const x = Math.max(0, e.clientX - timelineRect.left);
@@ -2319,8 +1981,10 @@
       const rect = timeline.getBoundingClientRect();
       const x = Math.max(0, Math.min(moveEvent.clientX - rect.left, rect.width));
       
-      // セル幅を取得
-      const cellWidth = userSettings.cellWidth || 80;
+      // セル幅を取得（モバイルかPCかで異なる）
+      const cellWidth = document.body.classList.contains('mobile-view') ? 
+                      (userSettings.mobileCellWidth || 80) : 
+                      (userSettings.cellWidth || 80);
       
       const cellIndex = Math.min(Math.max(0, Math.floor(x / cellWidth)), cells.length - 1);
       
@@ -2350,8 +2014,10 @@
       const rect = timeline.getBoundingClientRect();
       const x = Math.max(0, Math.min(upEvent.clientX - rect.left, rect.width));
       
-      // セル幅を取得
-      const cellWidth = userSettings.cellWidth || 80;
+      // セル幅を取得（モバイルかPCかで異なる）
+      const cellWidth = document.body.classList.contains('mobile-view') ? 
+                      (userSettings.mobileCellWidth || 80) : 
+                      (userSettings.cellWidth || 80);
       
       const cellIndex = Math.min(Math.max(0, Math.floor(x / cellWidth)), cells.length - 1);
       
@@ -2382,125 +2048,137 @@
 
   // 貸出モーダル表示の修正
 	function showRentalModal(equipmentId, startDateStr, endDateStr, location) {
-    try {
-      console.log('貸出モーダル表示:', equipmentId, startDateStr, endDateStr, '定置場所:', location);
-      
-      // 既に開いているモーダルをすべて閉じる
-      closeAllModals();
-      
-      // ドラッグされた列の機器と定置場所の情報を取得
-      let equipment = null;
-      
-      // 指定された機器ID + 定置場所で機材を検索
+  try {
+    console.log('貸出モーダル表示:', equipmentId, startDateStr, endDateStr, '定置場所:', location);
+    
+    // スワイプ操作直後は貸出モーダルを表示しない
+    if (isSwiping || (Date.now() - swipeEndTime < userSettings.swipeDelay)) {
+      console.log('スワイプ操作直後のため貸出モーダル表示をスキップします');
+      return;
+    }
+    
+    // 既に開いているモーダルをすべて閉じる
+    closeAllModals();
+    
+    // ドラッグされた列の機器と定置場所の情報を取得
+    let equipment = null;
+    
+    // 指定された機器ID + 定置場所で機材を検索
+    equipment = equipmentList.find(item => 
+      String(item['機器管理番号']) === String(equipmentId) && 
+      String(item['定置場所'] || '') === String(location || '')
+    );
+    
+    // 見つからなければ機器IDだけで検索
+    if (!equipment) {
       equipment = equipmentList.find(item => 
-        String(item['機器管理番号']) === String(equipmentId) && 
-        String(item['定置場所'] || '') === String(location || '')
+        String(item['機器管理番号']) === String(equipmentId)
+      );
+    }
+    
+    if (!equipment) {
+      alert(`機材情報の取得に失敗しました。\n機器管理番号: ${equipmentId}\n定置場所: ${location || '未設定'}`);
+      return;
+    }
+    
+    // モーダル要素の取得
+    const modal = document.getElementById('rental-modal');
+    if (!modal) {
+      alert('モーダル要素が見つかりません');
+      return;
+    }
+    
+    // フォーム要素の取得
+    const equipmentField = document.getElementById('rental-equipment');
+    const startDateField = document.getElementById('rental-start');
+    const endDateField = document.getElementById('rental-end');
+    const quantityField = document.getElementById('rental-quantity');
+    const projectSelect = document.getElementById('rental-project');
+    const newProjectField = document.getElementById('new-project');
+    const sourceLocationField = document.getElementById('rental-source-location');
+    
+    if (!equipmentField || !startDateField || !endDateField || !quantityField || 
+        !projectSelect || !newProjectField || !sourceLocationField) {
+      alert('フォーム要素が見つかりません');
+      return;
+    }
+    
+    // 機材名称の設定 - 機材名と管理番号を表示
+    equipmentField.value = `${equipment['機器名称']} (${equipment['機器管理番号']})`;
+    
+    // 借用開始日と終了日の設定
+    startDateField.value = startDateStr;
+    endDateField.value = endDateStr;
+    
+    // 数量の初期値を1に設定
+    quantityField.value = 1;
+    
+    // 新しい現場名入力欄をクリア（追加）
+    newProjectField.value = '';
+    
+    // 貸出元（定置場所）の設定
+    sourceLocationField.value = location || '';
+    
+    // 現場マスターのリストをドロップダウンに設定
+    projectSelect.innerHTML = '<option value="" disabled selected>現場を選択</option>';
+    if (projectsList && projectsList.length > 0) {
+      // 現場をあいうえお順にソート
+      const sortedProjects = [...projectsList].sort((a, b) => 
+        String(a.name || '').localeCompare(String(b.name || ''), 'ja')
       );
       
-      // 見つからなければ機器IDだけで検索
-      if (!equipment) {
-        equipment = equipmentList.find(item => 
-          String(item['機器管理番号']) === String(equipmentId)
-        );
-      }
-      
-      if (!equipment) {
-        alert(`機材情報の取得に失敗しました。\n機器管理番号: ${equipmentId}\n定置場所: ${location || '未設定'}`);
-        return;
-      }
-      
-      // モーダル要素の取得
-      const modal = document.getElementById('rental-modal');
-      if (!modal) {
-        alert('モーダル要素が見つかりません');
-        return;
-      }
-      
-      // フォーム要素の取得
-      const equipmentField = document.getElementById('rental-equipment');
-      const startDateField = document.getElementById('rental-start');
-      const endDateField = document.getElementById('rental-end');
-      const quantityField = document.getElementById('rental-quantity');
-      const projectSelect = document.getElementById('rental-project');
-      const newProjectField = document.getElementById('new-project');
-      const sourceLocationField = document.getElementById('rental-source-location');
-      
-      if (!equipmentField || !startDateField || !endDateField || !quantityField || 
-          !projectSelect || !newProjectField || !sourceLocationField) {
-        alert('フォーム要素が見つかりません');
-        return;
-      }
-      
-      // 機材名称の設定 - 機材名と管理番号を表示
-      equipmentField.value = `${equipment['機器名称']} (${equipment['機器管理番号']})`;
-      
-      // 借用開始日と終了日の設定
-      startDateField.value = startDateStr;
-      endDateField.value = endDateStr;
-      
-      // 数量の初期値を1に設定
-      quantityField.value = 1;
-      
-      // 新しい現場名入力欄をクリア（追加）
-      newProjectField.value = '';
-      
-      // 貸出元（定置場所）の設定
-      sourceLocationField.value = location || '';
-      
-      // 現場マスターのリストをドロップダウンに設定
-      projectSelect.innerHTML = '<option value="" disabled selected>現場を選択</option>';
-      if (projectsList && projectsList.length > 0) {
-        // 現場をあいうえお順にソート
-        const sortedProjects = [...projectsList].sort((a, b) => 
-          String(a.name || '').localeCompare(String(b.name || ''), 'ja')
-        );
+      // 選択肢を追加
+      sortedProjects.forEach(project => {
+        if (!project.name) return;
         
-        // 選択肢を追加
-        sortedProjects.forEach(project => {
-          if (!project.name) return;
-          
-          const option = document.createElement('option');
-          option.value = project.name;
-          option.textContent = project.name;
-          projectSelect.appendChild(option);
-        });
-      }
-      
-      // ラベルを浮かせる（Materialize CSS）
-      M.updateTextFields();
-      
-      // モーダル表示
-      const instance = M.Modal.getInstance(modal);
-      if (instance) {
-        instance.open();
-      } else {
-        const modalOptions = {
-          dismissible: true,
-          opacity: 0.5,
-          inDuration: 300,
-          outDuration: 200,
-          preventScrolling: true
-        };
-        M.Modal.init(modal, modalOptions).open();
-      }
-    } catch (error) {
-      console.error('貸出モーダル表示エラー:', error);
-      alert('貸出モーダル表示中にエラーが発生しました: ' + error);
+        const option = document.createElement('option');
+        option.value = project.name;
+        option.textContent = project.name;
+        projectSelect.appendChild(option);
+      });
     }
-    // モーダル表示後に日付ピッカーを初期化
-    setTimeout(() => {
-      setupDatePickers();
-    }, 100);
-    // モーダル表示後に数量コントロールを設定
-    setTimeout(() => {
-      setupQuantityControls();
-    }, 100);
+    
+    // ラベルを浮かせる（Materialize CSS）
+    M.updateTextFields();
+    
+    // モーダル表示
+    const instance = M.Modal.getInstance(modal);
+    if (instance) {
+      instance.open();
+    } else {
+      const modalOptions = {
+        dismissible: true,
+        opacity: 0.5,
+        inDuration: 300,
+        outDuration: 200,
+        preventScrolling: true
+      };
+      M.Modal.init(modal, modalOptions).open();
+    }
+  } catch (error) {
+    console.error('貸出モーダル表示エラー:', error);
+    alert('貸出モーダル表示中にエラーが発生しました: ' + error);
   }
+  // モーダル表示後に日付ピッカーを初期化
+  setTimeout(() => {
+    setupDatePickers();
+  }, 100);
+  // モーダル表示後に数量コントロールを設定
+  setTimeout(() => {
+    setupQuantityControls();
+  }, 100);
+}
   
   // 返却モーダル表示の修正
 	function showReturnModal(rental) {
 	  try {
 	    console.log('返却モーダル表示:', rental['機器管理番号'], 'Rental ID:', rental['登録日時']?.toString());
+	    
+	    // スワイプ操作直後は返却モーダルを表示しない
+	    if (isSwiping || (Date.now() - swipeEndTime < userSettings.swipeDelay)) {
+	      console.log('スワイプ操作直後のため返却モーダル表示をスキップします');
+	      return;
+	    }
 	    
 	    // 既に開いているモーダルをすべて閉じる
 	    closeAllModals();
@@ -3218,6 +2896,7 @@
 	  }
 	}
 	
+	
   // モーダル表示部分を分離
 	function showProjectsModal() {
 	  // モーダル表示
@@ -3287,12 +2966,9 @@
         const checkboxLabel = document.createElement('label');
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `project-${project.id}`;
-        checkbox.value = project.id;
-        checkbox.className = 'project-checkbox';
-        
+        checkbox.className = 'filled-in project-checkbox';
+        checkbox.dataset.projectName = project.name;
         const checkboxSpan = document.createElement('span');
-        
         checkboxLabel.appendChild(checkbox);
         checkboxLabel.appendChild(checkboxSpan);
         checkCell.appendChild(checkboxLabel);
@@ -3303,7 +2979,12 @@
         
         // 作成日セル
         const dateCell = document.createElement('td');
-        dateCell.textContent = project.createdAt ? formatDate(new Date(project.createdAt)) : '-';
+        if (project.createdAt) {
+          const createdDate = new Date(project.createdAt);
+          dateCell.textContent = formatDate(createdDate);
+        } else {
+          dateCell.textContent = '不明';
+        }
         
         // 行に追加
         row.appendChild(checkCell);
@@ -3318,119 +2999,177 @@
     }
   }
   
-  // 機器マスター管理モーダルを開く
-  function openEquipmentModal() {
+  // 現場を追加
+  function addProject() {
     try {
-      console.log('機器マスター管理モーダル表示');
-      
-      // 定置場所リストをセットアップ
-      setupLocationSelection();
-      
-      // 機材リストをテーブルに表示
-      updateEquipmentTable();
-      
-      // モーダル表示
-      const modal = document.getElementById('equipment-modal');
-      if (!modal) {
-        alert('モーダル要素が見つかりません');
+      const projectNameField = document.getElementById('new-project-name');
+      if (!projectNameField) {
+        alert('フォーム要素が見つかりません');
         return;
       }
       
-      try {
-        // 既存のインスタンスを削除
-        const oldInstance = M.Modal.getInstance(modal);
-        if (oldInstance) {
-          oldInstance.destroy();
-        }
-        
-        // 新しいインスタンスを作成して開く
-        const modalOptions = {
-          dismissible: true,
-          opacity: 0.5,
-          inDuration: 300,
-          outDuration: 200,
-          preventScrolling: true
-        };
-        
-        setTimeout(() => {
-          // フォーム初期化
-          document.getElementById('new-equipment-name')?.value = '';
-          document.getElementById('new-equipment-spec')?.value = '';
-          document.getElementById('new-equipment-model')?.value = '';
-          document.getElementById('new-equipment-maker')?.value = '';
-          document.getElementById('new-equipment-serial')?.value = '';
-          document.getElementById('new-equipment-quantity')?.value = '1';
-          document.getElementById('new-equipment-alias')?.value = '';
-          
-          // フィールドラベル更新
-          M.updateTextFields();
-          
-          // モーダル表示
-          const instance = M.Modal.init(modal, modalOptions);
-          instance.open();
-        }, 50);
-      } catch (error) {
-        console.error('機器マスターモーダル表示エラー:', error);
-        alert('モーダルの表示に失敗しました: ' + error);
+      const projectName = projectNameField.value.trim();
+      if (!projectName) {
+        alert('現場名を入力してください');
+        return;
       }
-    } catch (error) {
-      console.error('機器マスター管理モーダル表示エラー:', error);
-    }
-  }
-  
-  // 定置場所選択リストのセットアップ
-  function setupLocationSelection() {
-    try {
-      const locationSelect = document.getElementById('new-equipment-location');
-      if (!locationSelect) return;
       
-      // 選択肢をクリア
-      locationSelect.innerHTML = '<option value="" selected>定置場所を選択</option>';
-      
-      // 定置場所が空なら取得
-      if (!locationsList || locationsList.length === 0) {
-        // 定置場所取得APIを呼び出す
-        google.script.run
-          .withSuccessHandler(function(data) {
-            if (data && Array.isArray(data)) {
-              locationsList = data;
-              populateLocationOptions(locationSelect);
+      // 現場追加API実行
+      showLoading();
+      google.script.run
+        .withSuccessHandler(function(response) {
+          hideLoading();
+          
+          if (response && response.success) {
+            // 成功処理
+            console.log('現場追加成功:', response);
+            
+            // 入力フィールドをクリア
+            projectNameField.value = '';
+            
+            // 現場リスト再取得して一覧を更新
+            google.script.run
+              .withSuccessHandler(function(data) {
+                if (data && Array.isArray(data)) {
+                  projectsList = data;
+                  // 現場一覧テーブルを更新
+                  updateProjectsTable();
+                }
+              })
+              .getProjectsList();
+            
+            // 成功メッセージ
+            if (response.message) {
+              alert(response.message);
+            } else {
+              alert('現場を追加しました');
             }
-          })
-          .withFailureHandler(function(error) {
-            console.error('定置場所取得エラー:', error);
-          })
-          .getLocationsList();
-      } else {
-        // 既存のリストを使用
-        populateLocationOptions(locationSelect);
-      }
+          } else {
+            // 失敗処理
+            console.error('現場追加失敗:', response);
+            alert('現場の追加に失敗しました: ' + (response ? response.error : '不明なエラー'));
+          }
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          console.error('現場追加エラー:', error);
+          alert('現場の追加に失敗しました: ' + error);
+        })
+        .addProject({ name: projectName });
     } catch (error) {
-      console.error('定置場所選択設定エラー:', error);
+      console.error('現場追加エラー:', error);
+      hideLoading();
+      alert('現場の追加に失敗しました: ' + error);
     }
   }
   
-  // 定置場所オプションを埋める
-  function populateLocationOptions(selectElement) {
-    if (!selectElement || !locationsList) return;
-    
-    // あいうえお順にソート
-    const sortedLocations = [...locationsList].sort((a, b) => 
-      String(a.name || '').localeCompare(String(b.name || ''), 'ja')
-    );
-    
-    // 選択肢を追加
-    sortedLocations.forEach(location => {
-      if (!location.name) return;
+  // 現場を削除
+  function deleteProjects() {
+    try {
+      // 選択された現場を取得
+      const checkboxes = document.querySelectorAll('.project-checkbox:checked');
+      if (checkboxes.length === 0) {
+        alert('削除する現場を選択してください');
+        return;
+      }
       
-      const option = document.createElement('option');
-      option.value = location.name;
-      option.textContent = location.name;
-      selectElement.appendChild(option);
-    });
+      // 確認ダイアログ
+      if (!confirm(`選択された ${checkboxes.length} 件の現場を削除してもよろしいですか？`)) {
+        return;
+      }
+      
+      // 選択された現場名のリストを作成
+      const projectNames = Array.from(checkboxes).map(checkbox => checkbox.dataset.projectName);
+      
+      // 現場削除API実行
+      showLoading();
+      google.script.run
+        .withSuccessHandler(function(response) {
+          hideLoading();
+          
+          if (response && response.success) {
+            // 成功処理
+            console.log('現場削除成功:', response);
+            
+            // 現場リスト再取得して一覧を更新
+            google.script.run
+              .withSuccessHandler(function(data) {
+                if (data && Array.isArray(data)) {
+                  projectsList = data;
+                  updateProjectsTable();
+                }
+              })
+              .getProjectsList();
+            
+            // 成功メッセージ
+            alert(`${response.deletedCount || projectNames.length} 件の現場を削除しました`);
+          } else {
+            // 失敗処理
+            console.error('現場削除失敗:', response);
+            alert('現場の削除に失敗しました: ' + (response ? response.error : '不明なエラー'));
+          }
+        })
+        .withFailureHandler(function(error) {
+          hideLoading();
+          console.error('現場削除エラー:', error);
+          alert('現場の削除に失敗しました: ' + error);
+        })
+        .deleteProjects({ names: projectNames });
+    } catch (error) {
+      console.error('現場削除エラー:', error);
+      hideLoading();
+      alert('現場の削除に失敗しました: ' + error);
+    }
   }
   
-  // 機材リストをテーブルに表示
+  // 機器マスター管理モーダルを開く
+	function openEquipmentModal() {
+	  try {
+	    console.log('機器マスター管理モーダル表示');
+	    
+	    // 機器リストをテーブルに表示
+	    updateEquipmentTable();
+	    
+	    // 定置場所リストを選択肢に追加
+	    updateLocationSelect();
+	    
+	    // モーダル表示
+	    const modal = document.getElementById('equipment-modal');
+	    if (!modal) {
+	      alert('モーダル要素が見つかりません');
+	      return;
+	    }
+	    
+	    try {
+	      // 既存のインスタンスを削除
+	      const oldInstance = M.Modal.getInstance(modal);
+	      if (oldInstance) {
+	        oldInstance.destroy();
+	      }
+	      
+	      // 新しいインスタンスを作成して開く
+	      const modalOptions = {
+	        dismissible: true,
+	        opacity: 0.5,
+	        inDuration: 300,
+	        outDuration: 200,
+	        preventScrolling: true
+	      };
+	      
+	      setTimeout(() => {
+	        const instance = M.Modal.init(modal, modalOptions);
+	        instance.open();
+	      }, 50);
+	    } catch (error) {
+	      console.error('機器マスターモーダル表示エラー:', error);
+	      alert('モーダルの表示に失敗しました: ' + error);
+	    }
+	  } catch (error) {
+	    console.error('機器マスター管理モーダル表示エラー:', error);
+	  }
+	}
+  
+  // 機器リストをテーブルに表示
   function updateEquipmentTable() {
     try {
       const tableBody = document.getElementById('equipment-list');
@@ -3442,255 +3181,152 @@
       if (!equipmentList || equipmentList.length === 0) {
         const emptyRow = document.createElement('tr');
         const emptyCell = document.createElement('td');
-        emptyCell.colSpan = 5;
-        emptyCell.textContent = '登録されている機材はありません';
+        emptyCell.colSpan = 7;
+        emptyCell.textContent = '登録されている機器はありません';
         emptyCell.style.textAlign = 'center';
         emptyRow.appendChild(emptyCell);
         tableBody.appendChild(emptyRow);
         return;
       }
       
-      // 機材をあいうえお順にソート
-      const sortedEquipment = [...equipmentList].sort((a, b) => {
-        if (!a['機器名称']) return 1;
-        if (!b['機器名称']) return -1;
-        return String(a['機器名称']).localeCompare(String(b['機器名称']), 'ja');
-      });
+      // 機器をあいうえお順にソート
+      const sortedEquipment = [...equipmentList].sort((a, b) => 
+        String(a['機器名称'] || '').localeCompare(String(b['機器名称'] || ''), 'ja')
+      );
       
-      // 機材の行を作成（機器管理番号+定置場所ごとに）
+      // 機器の行を作成
       sortedEquipment.forEach(equipment => {
         const row = document.createElement('tr');
         
         // チェックボックスセル
         const checkCell = document.createElement('td');
         const checkboxLabel = document.createElement('label');
-        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `equipment-${equipment['機器管理番号']}-${equipment['定置場所'] || 'none'}`;
-        checkbox.value = JSON.stringify({
-          id: equipment['機器管理番号'],
-          location: equipment['定置場所'] || ''
-        });
-        checkbox.className = 'equipment-checkbox';
-        
+        checkbox.className = 'filled-in equipment-checkbox';
+        checkbox.dataset.equipmentId = equipment['機器管理番号'];
         const checkboxSpan = document.createElement('span');
-        
         checkboxLabel.appendChild(checkbox);
         checkboxLabel.appendChild(checkboxSpan);
         checkCell.appendChild(checkboxLabel);
         
         // 管理番号セル
         const idCell = document.createElement('td');
-        idCell.textContent = equipment['機器管理番号'] || '';
+        idCell.textContent = equipment['機器管理番号'];
         
-        // 機材名セル
+        // 機器名称セル
         const nameCell = document.createElement('td');
-        nameCell.textContent = equipment['機器名称'] || '';
+        nameCell.textContent = equipment['機器名称'];
         
         // 型番セル
         const modelCell = document.createElement('td');
         modelCell.textContent = equipment['型番'] || '';
         
-        // 台数セル
+        // メーカーセル
+        const makerCell = document.createElement('td');
+        makerCell.textContent = equipment['メーカー'] || '';
+        
+        // 総台数セル
         const quantityCell = document.createElement('td');
         quantityCell.textContent = equipment['総台数'] || '0';
-        quantityCell.style.textAlign = 'right';
+        
+        // 定置場所セル
+        const locationCell = document.createElement('td');
+        locationCell.textContent = equipment['定置場所'] || '';
         
         // 行に追加
         row.appendChild(checkCell);
         row.appendChild(idCell);
         row.appendChild(nameCell);
         row.appendChild(modelCell);
+        row.appendChild(makerCell);
         row.appendChild(quantityCell);
+        row.appendChild(locationCell);
         
         // テーブルに追加
         tableBody.appendChild(row);
       });
     } catch (error) {
-      console.error('機材テーブル更新エラー:', error);
+      console.error('機器テーブル更新エラー:', error);
     }
   }
   
-  // 現場追加関数
-  function addProject() {
+  // 定置場所選択肢の更新
+  function updateLocationSelect() {
     try {
-      const projectNameInput = document.getElementById('new-project-name');
-      if (!projectNameInput) {
-        alert('入力欄が見つかりません');
-        return;
+      const locationSelect = document.getElementById('new-equipment-location');
+      if (!locationSelect) return;
+      
+      // 既存の選択肢をクリア（最初のオプションは残す）
+      while (locationSelect.options.length > 1) {
+        locationSelect.remove(1);
       }
       
-      const projectName = projectNameInput.value.trim();
-      if (!projectName) {
-        alert('現場名を入力してください');
-        return;
+      // 定置場所リストを追加
+      if (locationsList && locationsList.length > 0) {
+        locationsList.forEach(location => {
+          const option = document.createElement('option');
+          option.value = location;
+          option.textContent = location;
+          locationSelect.appendChild(option);
+        });
       }
-      
-      // 同名の現場がないかチェック
-      const existingProject = projectsList.find(project => 
-        project.name.toLowerCase() === projectName.toLowerCase()
-      );
-      
-      if (existingProject) {
-        alert('その現場名は既に登録されています');
-        return;
-      }
-      
-      // データ準備
-      const data = {
-        name: projectName
-      };
-      
-      // 保存API実行
-      showLoading();
-      google.script.run
-        .withSuccessHandler(function(response) {
-          hideLoading();
-          
-          if (response && response.success) {
-            // 成功処理
-            projectNameInput.value = ''; // 入力欄をクリア
-            
-            // 現場リスト再取得
-            google.script.run
-              .withSuccessHandler(function(data) {
-                if (data && Array.isArray(data)) {
-                  projectsList = data;
-                  updateProjectsTable();
-                }
-              })
-              .withFailureHandler(function(error) {
-                console.error('現場リスト再取得エラー:', error);
-              })
-              .getProjectsList();
-            
-            alert('現場を追加しました');
-          } else {
-            // 失敗処理
-            alert('現場追加に失敗しました: ' + (response ? response.error : '不明なエラー'));
-          }
-        })
-        .withFailureHandler(function(error) {
-          hideLoading();
-          console.error('現場追加エラー:', error);
-          alert('現場追加に失敗しました: ' + error);
-        })
-        .addProject(data);
     } catch (error) {
-      console.error('現場追加処理エラー:', error);
-      alert('現場追加処理でエラーが発生しました: ' + error);
+      console.error('定置場所選択肢更新エラー:', error);
     }
   }
   
-  // 現場削除関数
-  function deleteProjects() {
-    try {
-      // チェックされた現場を取得
-      const checkboxes = document.querySelectorAll('.project-checkbox:checked');
-      if (checkboxes.length === 0) {
-        alert('削除する現場を選択してください');
-        return;
-      }
-      
-      // 確認ダイアログ
-      if (!confirm(`選択した${checkboxes.length}件の現場を削除しますか？`)) {
-        return;
-      }
-      
-      // 削除対象IDを取得
-      const projectIds = Array.from(checkboxes).map(checkbox => checkbox.value);
-      
-      // 削除API実行
-      showLoading();
-      google.script.run
-        .withSuccessHandler(function(response) {
-          hideLoading();
-          
-          if (response && response.success) {
-            // 成功処理
-            
-            // 現場リスト再取得
-            google.script.run
-              .withSuccessHandler(function(data) {
-                if (data && Array.isArray(data)) {
-                  projectsList = data;
-                  updateProjectsTable();
-                }
-              })
-              .withFailureHandler(function(error) {
-                console.error('現場リスト再取得エラー:', error);
-              })
-              .getProjectsList();
-            
-            alert(`${response.deletedCount}件の現場を削除しました`);
-          } else {
-            // 失敗処理
-            alert('現場削除に失敗しました: ' + (response ? response.error : '不明なエラー'));
-          }
-        })
-        .withFailureHandler(function(error) {
-          hideLoading();
-          console.error('現場削除エラー:', error);
-          alert('現場削除に失敗しました: ' + error);
-        })
-        .deleteProjects(projectIds);
-    } catch (error) {
-      console.error('現場削除処理エラー:', error);
-      alert('現場削除処理でエラーが発生しました: ' + error);
-    }
-  }
-  
-  // 機材追加関数
+  // 機器を追加
   function addEquipment() {
     try {
-      // 入力値取得
-      const nameInput = document.getElementById('new-equipment-name');
-      const specInput = document.getElementById('new-equipment-spec');
-      const modelInput = document.getElementById('new-equipment-model');
-      const makerInput = document.getElementById('new-equipment-maker');
-      const serialInput = document.getElementById('new-equipment-serial');
-      const quantityInput = document.getElementById('new-equipment-quantity');
-      const aliasInput = document.getElementById('new-equipment-alias');
+      // フォーム要素の取得
+      const nameField = document.getElementById('new-equipment-name');
+      const specField = document.getElementById('new-equipment-spec');
+      const modelField = document.getElementById('new-equipment-model');
+      const makerField = document.getElementById('new-equipment-maker');
+      const serialField = document.getElementById('new-equipment-serial');
+      const quantityField = document.getElementById('new-equipment-quantity');
+      const aliasField = document.getElementById('new-equipment-alias');
       const locationSelect = document.getElementById('new-equipment-location');
-      const note1Input = document.getElementById('new-equipment-note1');
-      const note2Input = document.getElementById('new-equipment-note2');
+      const note1Field = document.getElementById('new-equipment-note1');
+      const note2Field = document.getElementById('new-equipment-note2');
       
-      if (!nameInput || !quantityInput) {
-        alert('入力欄が見つかりません');
+      // 必須項目のチェック
+      if (!nameField || !quantityField) {
+        alert('フォーム要素が見つかりません');
         return;
       }
       
-      // 必須項目チェック
-      const name = nameInput.value.trim();
+      const name = nameField.value.trim();
+      const quantity = quantityField.value.trim();
+      
       if (!name) {
         alert('機器名称を入力してください');
-        nameInput.focus();
+        nameField.focus();
         return;
       }
       
-      const quantity = parseInt(quantityInput.value) || 0;
-      if (quantity <= 0) {
-        alert('有効な総台数を入力してください');
-        quantityInput.focus();
+      if (!quantity || isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) {
+        alert('有効な総台数（1以上の整数）を入力してください');
+        quantityField.focus();
         return;
       }
       
-      // データ準備
+      // データの準備
       const data = {
         name: name,
-        spec: specInput?.value.trim() || '',
-        model: modelInput?.value.trim() || '',
-        maker: makerInput?.value.trim() || '',
-        serial: serialInput?.value.trim() || '',
-        quantity: quantity,
-        alias: aliasInput?.value.trim() || '',
-        location: locationSelect?.value || '',
-        note1: note1Input?.value.trim() || '',
-        note2: note2Input?.value.trim() || ''
+        spec: specField ? specField.value : '',
+        model: modelField ? modelField.value : '',
+        maker: makerField ? makerField.value : '',
+        serialNo: serialField ? serialField.value : '',
+        quantity: parseInt(quantity),
+        alias: aliasField ? aliasField.value : '',
+        location: locationSelect ? locationSelect.value : '',
+        note1: note1Field ? note1Field.value : '',
+        note2: note2Field ? note2Field.value : ''
       };
       
-      // 保存API実行
+      // 機器追加API実行
       showLoading();
       google.script.run
         .withSuccessHandler(function(response) {
@@ -3698,72 +3334,68 @@
           
           if (response && response.success) {
             // 成功処理
-            nameInput.value = ''; // 入力欄をクリア
-            specInput.value = '';
-            modelInput.value = '';
-            makerInput.value = '';
-            serialInput.value = '';
-            quantityInput.value = '1';
-            aliasInput.value = '';
-            locationSelect.value = '';
-            note1Input.value = '';
-            note2Input.value = '';
+            console.log('機器追加成功:', response);
             
-            // フィールドラベル更新
-            M.updateTextFields();
+            // 入力フィールドをクリア
+            nameField.value = '';
+            if (specField) specField.value = '';
+            if (modelField) modelField.value = '';
+            if (makerField) makerField.value = '';
+            if (serialField) serialField.value = '';
+            quantityField.value = '';
+            if (aliasField) aliasField.value = '';
+            if (locationSelect) locationSelect.value = '';
+            if (note1Field) note1Field.value = '';
+            if (note2Field) note2Field.value = '';
             
             // 機材リスト再取得
             getEquipmentList();
             
-            alert('機材を追加しました');
+            // フォーム要素のラベルを元に戻す
+            document.querySelectorAll('#equipment-modal .input-field label').forEach(label => {
+              label.classList.remove('active');
+            });
+            
+            // 成功メッセージ
+            alert(`機器管理番号「${response.equipmentId}」で機器を追加しました`);
           } else {
             // 失敗処理
-            alert('機材追加に失敗しました: ' + (response ? response.error : '不明なエラー'));
+            console.error('機器追加失敗:', response);
+            alert('機器の追加に失敗しました: ' + (response ? response.error : '不明なエラー'));
           }
         })
         .withFailureHandler(function(error) {
           hideLoading();
-          console.error('機材追加エラー:', error);
-          alert('機材追加に失敗しました: ' + error);
+          console.error('機器追加エラー:', error);
+          alert('機器の追加に失敗しました: ' + error);
         })
         .addEquipment(data);
     } catch (error) {
-      console.error('機材追加処理エラー:', error);
-      alert('機材追加処理でエラーが発生しました: ' + error);
+      console.error('機器追加エラー:', error);
+      hideLoading();
+      alert('機器の追加に失敗しました: ' + error);
     }
   }
   
-  // 機材削除関数
+  // 機器を削除
   function deleteEquipment() {
     try {
-      // チェックされた機材を取得
+      // 選択された機器を取得
       const checkboxes = document.querySelectorAll('.equipment-checkbox:checked');
       if (checkboxes.length === 0) {
-        alert('削除する機材を選択してください');
+        alert('削除する機器を選択してください');
         return;
       }
       
       // 確認ダイアログ
-      if (!confirm(`選択した${checkboxes.length}件の機材を削除しますか？`)) {
+      if (!confirm(`選択された ${checkboxes.length} 件の機器を削除してもよろしいですか？`)) {
         return;
       }
       
-      // 削除対象データを取得
-      const equipmentItems = Array.from(checkboxes).map(checkbox => {
-        try {
-          return JSON.parse(checkbox.value);
-        } catch (e) {
-          console.error('JSONパースエラー:', e);
-          return null;
-        }
-      }).filter(item => item !== null);
+      // 選択された機器IDのリストを作成
+      const equipmentIds = Array.from(checkboxes).map(checkbox => checkbox.dataset.equipmentId);
       
-      // バックアップ用に最後の削除アイテムを保存
-      if (equipmentItems.length > 0) {
-        lastDeletedEquipment = equipmentItems[equipmentItems.length - 1];
-      }
-      
-      // 削除API実行
+      // 機器削除API実行
       showLoading();
       google.script.run
         .withSuccessHandler(function(response) {
@@ -3771,42 +3403,49 @@
           
           if (response && response.success) {
             // 成功処理
+            console.log('機器削除成功:', response);
+            
+            // 削除タイムスタンプを保存
+            lastDeletedEquipment = response.timestamp;
             
             // 機材リスト再取得
             getEquipmentList();
             
-            alert(`${response.deletedCount}件の機材を削除しました`);
+            // 成功メッセージ
+            alert(`${response.deletedCount || equipmentIds.length} 件の機器を削除しました`);
           } else {
             // 失敗処理
-            alert('機材削除に失敗しました: ' + (response ? response.error : '不明なエラー'));
+            console.error('機器削除失敗:', response);
+            alert('機器の削除に失敗しました: ' + (response ? response.error : '不明なエラー'));
           }
         })
         .withFailureHandler(function(error) {
           hideLoading();
-          console.error('機材削除エラー:', error);
-          alert('機材削除に失敗しました: ' + error);
+          console.error('機器削除エラー:', error);
+          alert('機器の削除に失敗しました: ' + error);
         })
-        .deleteEquipment(equipmentItems);
+        .deleteEquipments({ ids: equipmentIds });
     } catch (error) {
-      console.error('機材削除処理エラー:', error);
-      alert('機材削除処理でエラーが発生しました: ' + error);
+      console.error('機器削除エラー:', error);
+      hideLoading();
+      alert('機器の削除に失敗しました: ' + error);
     }
   }
   
-  // 機材削除の取り消し
+  // 機器削除の取り消し
   function undoEquipmentDelete() {
     try {
       if (!lastDeletedEquipment) {
-        alert('取り消す削除操作がありません');
+        alert('元に戻せる削除操作がありません');
         return;
       }
       
       // 確認ダイアログ
-      if (!confirm('最後に削除した機材を復元しますか？')) {
+      if (!confirm('最後に削除した機器を復元しますか？')) {
         return;
       }
       
-      // 復元API実行
+      // 機器削除アンドゥAPI実行
       showLoading();
       google.script.run
         .withSuccessHandler(function(response) {
@@ -3814,74 +3453,2472 @@
           
           if (response && response.success) {
             // 成功処理
+            console.log('機器復元成功:', response);
+            
+            // 復元タイムスタンプをクリア
+            lastDeletedEquipment = null;
             
             // 機材リスト再取得
             getEquipmentList();
             
-            // 復元したので削除履歴をクリア
-            lastDeletedEquipment = null;
-            
-            alert('削除を取り消しました');
+            // 成功メッセージ
+            alert(`${response.restoredCount || 0} 件の機器を復元しました`);
           } else {
             // 失敗処理
-            alert('削除取り消しに失敗しました: ' + (response ? response.error : '不明なエラー'));
+            console.error('機器復元失敗:', response);
+            alert('機器の復元に失敗しました: ' + (response ? response.error : '不明なエラー'));
           }
         })
         .withFailureHandler(function(error) {
           hideLoading();
-          console.error('削除取り消しエラー:', error);
-          alert('削除取り消しに失敗しました: ' + error);
+          console.error('機器復元エラー:', error);
+          alert('機器の復元に失敗しました: ' + error);
         })
-        .undoEquipmentDelete(lastDeletedEquipment);
+        .undoEquipmentDelete({ timestamp: lastDeletedEquipment });
     } catch (error) {
-      console.error('削除取り消し処理エラー:', error);
-      alert('削除取り消し処理でエラーが発生しました: ' + error);
+      console.error('機器復元エラー:', error);
+      hideLoading();
+      alert('機器の復元に失敗しました: ' + error);
     }
   }
   
-  // モーダルをすべて閉じる関数
-  function closeAllModals() {
+  // 設定を読み込む関数
+  function loadUserSettings() {
     try {
-      // すべてのモーダル要素を取得
-      const modals = document.querySelectorAll('.modal');
+      const savedSettings = localStorage.getItem('rentalSystemSettings');
+      if (savedSettings) {
+        userSettings = JSON.parse(savedSettings);
+      }
       
-      // 各モーダルを閉じる
-      modals.forEach(modal => {
-        const instance = M.Modal.getInstance(modal);
-        if (instance) {
-          instance.close();
-        }
+      // フォントサイズの初期値
+      if (!localStorage.getItem('mobileFontSize')) {
+        localStorage.setItem('mobileFontSize', '30');
+      }
+      
+      // 設定UIの状態を反映
+      updateSettingsUI();
+    } catch (error) {
+      console.error('設定の読み込みに失敗しました:', error);
+    }
+  }
+
+  // 設定を保存する関数
+  function saveUserSettings() {
+    try {
+      localStorage.setItem('rentalSystemSettings', JSON.stringify(userSettings));
+    } catch (error) {
+      console.error('設定の保存に失敗しました:', error);
+    }
+  }
+
+  // 設定UIの状態を更新する関数
+  function updateSettingsUI() {
+    const confirmDialogCheckbox = document.getElementById('confirm-dialog-checkbox');
+    if (confirmDialogCheckbox) {
+      confirmDialogCheckbox.checked = userSettings.showConfirmDialog;
+    }
+  }
+  
+  // ユーザーのメールアドレスから表示名を取得する関数
+  function getUserDisplayName(email) {
+    if (!email) return '';
+    
+    // メールアドレスと一致するユーザーがいれば表示名を使用
+    if (email === userEmail) {
+      return userName;
+    }
+    
+    // それ以外はメールアドレスの@前を表示
+    return email.split('@')[0];
+  }
+  
+  // 機材詳細情報の行を追加するヘルパー関数
+  function addDetailLine(container, label, value) {
+    if (!value) return;
+    
+    const detailDiv = document.createElement('div');
+    detailDiv.className = 'equipment-detail';
+    detailDiv.textContent = `${label}: ${value}`;
+    container.appendChild(detailDiv);
+  }
+
+  // バーのドラッグとリサイズを有効化する関数（改善版）
+	function enableBarDragAndResize(bar, rental) {
+	  if (!bar) return;
+	  
+	  // 返却ボタンを作成（バーの右側に配置）
+	  const returnButton = document.createElement('div');
+	  returnButton.className = 'return-button';
+	  returnButton.innerHTML = '<i class="material-icons" style="font-size: 18px;">assignment_return</i>';
+	  returnButton.style.position = 'absolute';
+	  returnButton.style.right = '5px'; // 右側に配置
+	  returnButton.style.top = '50%';
+	  returnButton.style.transform = 'translateY(-50%)';
+	  returnButton.style.width = '28px';
+	  returnButton.style.height = '28px';
+	  returnButton.style.borderRadius = '50%';
+	  returnButton.style.backgroundColor = 'rgba(255,255,255,0.3)';
+	  returnButton.style.display = 'flex';
+	  returnButton.style.alignItems = 'center';
+	  returnButton.style.justifyContent = 'center';
+	  returnButton.style.cursor = 'pointer';
+	  returnButton.style.zIndex = '30'; // リサイズハンドルより高い値に設定
+	  
+	  // 返却ボタンのクリックイベント - 修正版
+	  returnButton.addEventListener('click', function(e) {
+	    // イベント伝播を停止
+	    e.stopPropagation();
+	    e.preventDefault();
+	  
+	    console.log('Return button clicked');
+	    
+	    // すべてのモーダルを閉じる
+	    closeAllModals();
+	  
+	    // 少し遅延させて返却モーダルを表示
+	    setTimeout(() => {
+	      showReturnModal(rental);
+	    }, 100);
+	  
+	    return false;
+	  });
+	  
+	  // ドラッグハンドルを作成（バーの中央部分）
+	  const dragHandle = document.createElement('div');
+	  dragHandle.className = 'drag-handle';
+	  dragHandle.style.position = 'absolute';
+	  dragHandle.style.width = 'calc(100% - 60px)'; // 左右のリサイズハンドル+返却ボタン用に余白を広げる
+	  dragHandle.style.height = '100%';
+	  dragHandle.style.left = '30px'; // 左側余白を広げる
+	  dragHandle.style.top = '0';
+	  dragHandle.style.cursor = 'move';
+	  dragHandle.style.zIndex = '5';
+	  
+	  // 左リサイズハンドルを作成
+	  const leftResizeHandle = document.createElement('div');
+	  leftResizeHandle.className = 'resize-handle left-handle';
+	  leftResizeHandle.style.position = 'absolute';
+	  leftResizeHandle.style.width = '20px'; // 幅を広げる
+	  leftResizeHandle.style.height = '100%';
+	  leftResizeHandle.style.left = '0';
+	  leftResizeHandle.style.top = '0';
+	  leftResizeHandle.style.cursor = 'w-resize';
+	  leftResizeHandle.style.zIndex = '20'; // より高いz-indexに設定
+	  
+	  // 右リサイズハンドルを作成
+	  const rightResizeHandle = document.createElement('div');
+	  rightResizeHandle.className = 'resize-handle right-handle';
+	  rightResizeHandle.style.position = 'absolute';
+	  rightResizeHandle.style.width = '20px'; // 幅を広げる
+	  rightResizeHandle.style.height = '100%';
+	  rightResizeHandle.style.right = '0';
+	  rightResizeHandle.style.top = '0';
+	  rightResizeHandle.style.cursor = 'e-resize';
+	  rightResizeHandle.style.zIndex = '20'; // より高いz-indexに設定
+	  
+	  // モバイル用追加処理
+	  if (('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+	    setupMobileBarEvents(bar, leftResizeHandle, rightResizeHandle, dragHandle, rental);
+	  }
+	  
+	  // バーに追加
+	  bar.appendChild(dragHandle);
+	  bar.appendChild(leftResizeHandle);
+	  bar.appendChild(rightResizeHandle);
+	  bar.appendChild(returnButton);
+	  
+	  // バー全体のクリックイベントを削除（競合防止）
+	  bar.onclick = null;
+	  bar.classList.add('editable');
+	  
+	  // ドラッグハンドルのイベント設定
+	  dragHandle.addEventListener('mousedown', function(e) {
+	    e.stopPropagation();
+	    
+	    const timeline = bar.closest('.gantt-timeline');
+	    if (!timeline) return;
+	    
+	    // 貸出情報取得
+	    const rentalId = bar.dataset.rentalId;
+	    const rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
+	    
+	    if (!rental) {
+	      console.error('貸出情報の取得に失敗しました');
+	      return;
+	    }
+	    
+	    // ドラッグ開始
+	    isDraggingBar = true;
+	    dragBarMode = 'move';
+	    dragBarElement = bar;
+	    dragBarStartX = e.clientX;
+	    dragBarData = rental;
+	    
+	    // 元の位置と期間情報を保存
+	    dragBarOriginalPosition = {
+	      left: parseInt(bar.style.left, 10) || 0,
+	      width: parseInt(bar.style.width, 10) || 0,
+	      timeline: timeline,
+	      timelineRect: timeline.getBoundingClientRect(),
+	      equipmentId: timeline.dataset.equipment,
+	      location: timeline.dataset.location || '',
+	      layer: bar.dataset.layer || 0,
+	      startDate: rental['借用開始日'],
+	      endDate: rental['借用終了日']
+	    };
+	    
+	    // グローバルイベントを追加
+	    document.addEventListener('mousemove', onBarDragMove);
+	    document.addEventListener('mouseup', onBarDragEnd);
+	    
+	    // ドラッグアニメーション用のクラスを追加
+	    bar.classList.add('dragging');
+	  });
+	  
+	  // 左リサイズハンドルのイベント設定
+	  leftResizeHandle.addEventListener('mousedown', function(e) {
+	    e.stopPropagation();
+	    
+	    const timeline = bar.closest('.gantt-timeline');
+	    if (!timeline) return;
+	    
+	    // 貸出情報取得
+	    const rentalId = bar.dataset.rentalId;
+	    const rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
+	    
+	    if (!rental) {
+	      console.error('貸出情報の取得に失敗しました');
+	      return;
+	    }
+	    
+	    // リサイズ開始
+	    isResizingBar = true;
+	    dragBarMode = 'resize-start';
+	    dragBarElement = bar;
+	    dragBarStartX = e.clientX;
+	    dragBarStartWidth = parseInt(bar.style.width, 10) || 80;
+	    dragBarData = rental;
+	    
+	    // 元の位置を保存
+	    dragBarOriginalPosition = {
+	      left: parseInt(bar.style.left, 10) || 0,
+	      width: parseInt(bar.style.width, 10) || 80,
+	      timeline: timeline,
+	      timelineRect: timeline.getBoundingClientRect(),
+	      equipmentId: timeline.dataset.equipment,
+	      location: timeline.dataset.location || '',
+	      layer: bar.dataset.layer || 0,
+	      startDate: rental['借用開始日'],
+	      endDate: rental['借用終了日']
+	    };
+	    
+	    // グローバルイベントを追加
+	    document.addEventListener('mousemove', onBarResizeMove);
+	    document.addEventListener('mouseup', onBarResizeEnd);
+	    
+	    // リサイズアニメーション用のクラスを追加
+	    bar.classList.add('resizing');
+	  });
+	  
+	  // 右リサイズハンドルのイベント設定
+	  rightResizeHandle.addEventListener('mousedown', function(e) {
+	    e.stopPropagation();
+	    
+	    const timeline = bar.closest('.gantt-timeline');
+	    if (!timeline) return;
+	    
+	    // 貸出情報取得
+	    const rentalId = bar.dataset.rentalId;
+	    const rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
+	    
+	    if (!rental) {
+	      console.error('貸出情報の取得に失敗しました');
+	      return;
+	    }
+	    
+	    // リサイズ開始
+	    isResizingBar = true;
+	    dragBarMode = 'resize-end';
+	    dragBarElement = bar;
+	    dragBarStartX = e.clientX;
+	    dragBarStartWidth = parseInt(bar.style.width, 10) || 80;
+	    dragBarData = rental;
+	    
+	    // 元の位置を保存
+	    dragBarOriginalPosition = {
+	      left: parseInt(bar.style.left, 10) || 0,
+	      width: parseInt(bar.style.width, 10) || 80,
+	      timeline: timeline,
+	      timelineRect: timeline.getBoundingClientRect(),
+	      equipmentId: timeline.dataset.equipment,
+	      location: timeline.dataset.location || '',
+	      layer: bar.dataset.layer || 0,
+	      startDate: rental['借用開始日'],
+	      endDate: rental['借用終了日']
+	    };
+	    
+	    // グローバルイベントを追加
+	    document.addEventListener('mousemove', onBarResizeMove);
+	    document.addEventListener('mouseup', onBarResizeEnd);
+	    
+	    // リサイズアニメーション用のクラスを追加
+	    bar.classList.add('resizing');
+	  });
+	}
+  
+  // モバイル用バーイベント設定
+  function setupMobileBarEvents(bar, leftHandle, rightHandle, dragHandle, rental) {
+    try {
+      // ドラッグ開始
+      dragHandle.addEventListener('touchstart', function(e) {
+        e.stopPropagation();
+        
+        const timeline = bar.closest('.gantt-timeline');
+        if (!timeline) return;
+        
+        // ドラッグ開始
+        isDraggingBar = true;
+        dragBarMode = 'move';
+        dragBarElement = bar;
+        dragBarStartX = e.touches[0].clientX;
+        dragBarData = rental;
+        
+        // 元の位置と期間情報を保存
+        dragBarOriginalPosition = {
+          left: parseInt(bar.style.left, 10) || 0,
+          width: parseInt(bar.style.width, 10) || 0,
+          timeline: timeline,
+          timelineRect: timeline.getBoundingClientRect(),
+          equipmentId: timeline.dataset.equipment,
+          location: timeline.dataset.location || '',
+          layer: bar.dataset.layer || 0,
+          startDate: rental['借用開始日'],
+          endDate: rental['借用終了日']
+        };
+        
+        // タッチイベントを追加
+        document.addEventListener('touchmove', onBarTouchMove, { passive: false });
+        document.addEventListener('touchend', onBarTouchEnd);
+        
+        // ドラッグアニメーション用のクラスを追加
+        bar.classList.add('dragging');
+      });
+      
+      // 左リサイズハンドルのタッチイベント
+      leftHandle.addEventListener('touchstart', function(e) {
+        e.stopPropagation();
+        
+        const timeline = bar.closest('.gantt-timeline');
+        if (!timeline) return;
+        
+        // リサイズ開始
+        isResizingBar = true;
+        dragBarMode = 'resize-start';
+        dragBarElement = bar;
+        dragBarStartX = e.touches[0].clientX;
+        dragBarStartWidth = parseInt(bar.style.width, 10) || 80;
+        dragBarData = rental;
+        
+        // 元の位置を保存
+        dragBarOriginalPosition = {
+          left: parseInt(bar.style.left, 10) || 0,
+          width: parseInt(bar.style.width, 10) || 80,
+          timeline: timeline,
+          timelineRect: timeline.getBoundingClientRect(),
+          equipmentId: timeline.dataset.equipment,
+          location: timeline.dataset.location || '',
+          layer: bar.dataset.layer || 0,
+          startDate: rental['借用開始日'],
+          endDate: rental['借用終了日']
+        };
+        
+        // タッチイベントを追加
+        document.addEventListener('touchmove', onBarTouchResize, { passive: false });
+        document.addEventListener('touchend', onBarTouchResizeEnd);
+        
+        // リサイズアニメーション用のクラスを追加
+        bar.classList.add('resizing');
+      });
+      
+      // 右リサイズハンドルのタッチイベント
+      rightHandle.addEventListener('touchstart', function(e) {
+        e.stopPropagation();
+        
+        const timeline = bar.closest('.gantt-timeline');
+        if (!timeline) return;
+        
+        // リサイズ開始
+        isResizingBar = true;
+        dragBarMode = 'resize-end';
+        dragBarElement = bar;
+        dragBarStartX = e.touches[0].clientX;
+        dragBarStartWidth = parseInt(bar.style.width, 10) || 80;
+        dragBarData = rental;
+        
+        // 元の位置を保存
+        dragBarOriginalPosition = {
+          left: parseInt(bar.style.left, 10) || 0,
+          width: parseInt(bar.style.width, 10) || 80,
+          timeline: timeline,
+          timelineRect: timeline.getBoundingClientRect(),
+          equipmentId: timeline.dataset.equipment,
+          location: timeline.dataset.location || '',
+          layer: bar.dataset.layer || 0,
+          startDate: rental['借用開始日'],
+          endDate: rental['借用終了日']
+        };
+        
+        // タッチイベントを追加
+        document.addEventListener('touchmove', onBarTouchResize, { passive: false });
+        document.addEventListener('touchend', onBarTouchResizeEnd);
+        
+        // リサイズアニメーション用のクラスを追加
+        bar.classList.add('resizing');
       });
     } catch (error) {
-      console.error('モーダル閉じるエラー:', error);
+      console.error('モバイルバーイベント設定エラー:', error);
     }
   }
   
-  // スクロール位置保存
-  function saveScrollPosition() {
-    try {
-      const container = document.querySelector('.gantt-container');
-      if (container) {
-        savedScrollPosition = {
-          top: container.scrollTop,
-          left: container.scrollLeft
-        };
+  // バータッチ移動ハンドラ
+  function onBarTouchMove(e) {
+    if (!isDraggingBar || !dragBarElement || !dragBarOriginalPosition) return;
+    
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - dragBarStartX;
+    const newLeft = Math.max(0, dragBarOriginalPosition.left + deltaX);
+    
+    // バーの位置のみを更新（幅は維持）
+    dragBarElement.style.left = newLeft + 'px';
+    
+    // ドロップターゲットをハイライト
+    const elementsFromPoint = document.elementsFromPoint(touch.clientX, touch.clientY);
+    for (const element of elementsFromPoint) {
+      if (element.classList.contains('gantt-timeline') && 
+          element !== dragBarOriginalPosition.timeline) {
+        element.classList.add('drop-target');
+        currentDropTarget = element;
+        break;
       }
+    }
+  }
+
+  // バータッチ終了ハンドラ
+  function onBarTouchEnd(e) {
+    if (!isDraggingBar || !dragBarElement || !dragBarOriginalPosition) return;
+    
+    // タッチイベント削除
+    document.removeEventListener('touchmove', onBarTouchMove);
+    document.removeEventListener('touchend', onBarTouchEnd);
+    
+    // スクロール位置を保存
+    saveScrollPosition();
+    
+    // クラスを削除
+    dragBarElement.classList.remove('dragging');
+    
+    try {
+      // ドロップ先のタイムラインを特定
+      let targetTimeline = currentDropTarget || dragBarOriginalPosition.timeline;
+      let targetEquipmentId = targetTimeline.dataset.equipment;
+      let targetLocation = targetTimeline.dataset.location || '';
+      
+      // 機器IDが無効な場合は元の値を使用
+      if (!targetEquipmentId) {
+        targetEquipmentId = dragBarOriginalPosition.equipmentId;
+        targetLocation = dragBarOriginalPosition.location || '';
+      }
+      
+      // 新しい位置を計算
+      const newLeft = parseInt(dragBarElement.style.left, 10);
+      // モバイルとPCでセルサイズを変更
+      const cellWidth = document.body.classList.contains('mobile-view') ? 
+                      (userSettings.mobileCellWidth || 80) : 
+                      (userSettings.cellWidth || 80);
+      const startIdx = Math.floor(newLeft / cellWidth);
+      
+      // 日付を取得
+      const dayCells = Array.from(targetTimeline.querySelectorAll('.gantt-day'));
+      if (startIdx >= dayCells.length || startIdx < 0) {
+        resetBarPosition();
+        return;
+      }
+      
+      const startDateStr = dayCells[startIdx].dataset.date;
+      if (!startDateStr) {
+        resetBarPosition();
+        return;
+      }
+      
+      // 元の借用期間を計算
+      const origStartDate = new Date(dragBarOriginalPosition.startDate);
+      const origEndDate = new Date(dragBarOriginalPosition.endDate);
+      
+      if (isNaN(origStartDate.getTime()) || isNaN(origEndDate.getTime())) {
+        resetBarPosition();
+        return;
+      }
+      
+      // 日数差を計算
+      const daysDiff = Math.round((origEndDate - origStartDate) / (1000 * 60 * 60 * 24));
+      
+      // 新しい開始日と終了日を計算
+      const newStartDate = new Date(startDateStr);
+      const newEndDate = new Date(newStartDate);
+      newEndDate.setDate(newStartDate.getDate() + daysDiff);
+      
+      // 表示範囲チェック
+      const lastDayCell = dayCells[dayCells.length - 1];
+      if (!lastDayCell) {
+        resetBarPosition();
+        return;
+      }
+      
+      const lastDateStr = lastDayCell.dataset.date;
+      if (!lastDateStr) {
+        resetBarPosition();
+        return;
+      }
+      
+      const lastDate = new Date(lastDateStr);
+      if (newEndDate > lastDate) {
+        resetBarPosition();
+        return;
+      }
+      
+      // 終了日の文字列を取得
+      const endDateStr = formatDate(newEndDate);
+      
+      // 更新処理
+      const rentalId = dragBarData['登録日時'].toString();
+      
+      const oldEquipmentId = dragBarOriginalPosition.equipmentId;
+      const oldLocation = dragBarOriginalPosition.location || '';
+      
+      // 選択中機材を保持
+      const keepSelectedEquipment = selectedEquipment;
+      const keepSelectedEquipmentWithLocation = selectedEquipmentWithLocation;
+      
+      // 変更を確認してサーバーに送信
+      showRentalUpdateConfirmation(
+        rentalId,
+        oldEquipmentId,
+        targetEquipmentId,
+        startDateStr,
+        endDateStr,
+        oldLocation,
+        targetLocation,
+        function() {
+          // 成功コールバック
+          selectedEquipment = keepSelectedEquipment;
+          selectedEquipmentWithLocation = keepSelectedEquipmentWithLocation;
+        }
+      );
     } catch (error) {
-      console.error('スクロール位置保存エラー:', error);
+      console.error('タッチドラッグ終了エラー:', error);
+      resetBarPosition();
+    }
+    
+    // ハイライトを削除
+    document.querySelectorAll('.gantt-timeline.drop-target').forEach(el => {
+      el.classList.remove('drop-target');
+    });
+    
+    // 変数をリセット
+    isDraggingBar = false;
+    dragBarElement = null;
+    dragBarStartX = 0;
+    dragBarOriginalPosition = null;
+    dragBarData = null;
+    currentDropTarget = null;
+  }
+
+  // バータッチリサイズ移動ハンドラ
+  function onBarTouchResize(e) {
+    if (!isResizingBar || !dragBarElement || !dragBarOriginalPosition) return;
+    
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - dragBarStartX;
+    // モバイルとPCでセルサイズを変更
+    const cellWidth = document.body.classList.contains('mobile-view') ? 
+                    (userSettings.mobileCellWidth || 80) : 
+                    (userSettings.cellWidth || 80);
+    
+    if (dragBarMode === 'resize-start') {
+      // 左側のリサイズ
+      const maxDelta = dragBarOriginalPosition.width - cellWidth;
+      const constrainedDelta = Math.min(maxDelta, Math.max(-dragBarOriginalPosition.left, deltaX));
+      
+      const newLeft = dragBarOriginalPosition.left + constrainedDelta;
+      const newWidth = dragBarOriginalPosition.width - constrainedDelta;
+      
+      dragBarElement.style.left = newLeft + 'px';
+      dragBarElement.style.width = newWidth + 'px';
+    } else if (dragBarMode === 'resize-end') {
+      // 右側のリサイズ
+      const timelineWidth = dragBarOriginalPosition.timelineRect.width;
+      const maxRight = timelineWidth;
+      const currentRight = dragBarOriginalPosition.left + dragBarOriginalPosition.width;
+      
+      const maxDelta = maxRight - currentRight;
+      const minDelta = cellWidth - dragBarOriginalPosition.width;
+      
+      const constrainedDelta = Math.min(maxDelta, Math.max(minDelta, deltaX));
+      const newWidth = dragBarOriginalPosition.width + constrainedDelta;
+      
+      dragBarElement.style.width = newWidth + 'px';
+    }
+  }
+
+  // バータッチリサイズ終了ハンドラ
+  function onBarTouchResizeEnd(e) {
+    if (!isResizingBar || !dragBarElement || !dragBarOriginalPosition) return;
+    
+    // タッチイベント削除
+    document.removeEventListener('touchmove', onBarTouchResize);
+    document.removeEventListener('touchend', onBarTouchResizeEnd);
+    
+    // スクロール位置を保存
+    saveScrollPosition();
+    
+    // クラスを削除
+    dragBarElement.classList.remove('resizing');
+    
+    try {
+      // リサイズ後の詳細を計算
+      const newLeft = parseInt(dragBarElement.style.left, 10);
+      const width = parseInt(dragBarElement.style.width, 10);
+      // モバイルとPCでセルサイズを変更
+      const cellWidth = document.body.classList.contains('mobile-view') ? 
+                      (userSettings.mobileCellWidth || 80) : 
+                      (userSettings.cellWidth || 80);
+      
+      // 新しい開始インデックスと終了インデックスを計算
+      const startIdx = Math.floor(newLeft / cellWidth);
+      const endIdx = Math.floor((newLeft + width - 1) / cellWidth);
+      
+      // 日付を取得
+      const timeline = dragBarOriginalPosition.timeline;
+      const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
+      
+      if (startIdx >= dayCells.length || endIdx >= dayCells.length || startIdx < 0 || endIdx < 0) {
+        resetBarPosition();
+        return;
+      }
+      
+      const startDateStr = dayCells[startIdx].dataset.date;
+      const endDateStr = dayCells[endIdx].dataset.date;
+      
+      if (!startDateStr || !endDateStr) {
+        resetBarPosition();
+        return;
+      }
+      
+      // 貸出データを検索
+      const rentalId = dragBarData['登録日時'].toString();
+      
+      const equipmentId = dragBarOriginalPosition.equipmentId;
+      const location = dragBarOriginalPosition.location || '';
+      
+      // 選択中機材を保持
+      const keepSelectedEquipment = selectedEquipment;
+      const keepSelectedEquipmentWithLocation = selectedEquipmentWithLocation;
+      
+      // 変更を確認してサーバーに送信
+      showRentalUpdateConfirmation(
+        rentalId,
+        equipmentId,
+        equipmentId,
+        startDateStr,
+        endDateStr,
+        location,
+        location,
+        function() {
+          // 成功コールバック
+          selectedEquipment = keepSelectedEquipment;
+          selectedEquipmentWithLocation = keepSelectedEquipmentWithLocation;
+        }
+      );
+    } catch (error) {
+      console.error('タッチリサイズ終了エラー:', error);
+      resetBarPosition();
+    }
+    
+    // 変数をリセット
+    isResizingBar = false;
+    dragBarElement = null;
+    dragBarStartX = 0;
+    dragBarStartWidth = 0;
+    dragBarOriginalPosition = null;
+    dragBarData = null;
+    dragBarMode = null;
+  }
+
+  // バードラッグのマウス移動ハンドラ
+	function onBarDragMove(e) {
+	  if (!isDraggingBar || !dragBarElement || !dragBarOriginalPosition) return;
+	  
+	  e.preventDefault();
+	  
+	  const deltaX = e.clientX - dragBarStartX;
+	  const newLeft = Math.max(0, dragBarOriginalPosition.left + deltaX);
+	  
+	  // バーの位置のみを更新（幅は維持）
+	  dragBarElement.style.left = newLeft + 'px';
+	  
+	  // ドロップターゲットをハイライト
+	  highlightDropTarget(e);
+	  
+	  // カレンダーの端に近づいたらスクロール
+	  const container = document.querySelector('.gantt-container');
+	  if (container) {
+	    const containerRect = container.getBoundingClientRect();
+	    const scrollSpeed = 10;
+	    
+	    // 右端に近づいたら右にスクロール
+	    if (e.clientX > containerRect.right - 50) {
+	      container.scrollLeft += scrollSpeed;
+	    }
+	    
+	    // 左端に近づいたら左にスクロール
+	    if (e.clientX < containerRect.left + 50) {
+	      container.scrollLeft -= scrollSpeed;
+	    }
+	  }
+	}
+
+  // バードラッグの終了ハンドラ
+	function onBarDragEnd(e) {
+	  if (!isDraggingBar || !dragBarElement || !dragBarOriginalPosition) return;
+	  
+	  e.preventDefault();
+	  
+	  // グローバルイベントを削除
+	  document.removeEventListener('mousemove', onBarDragMove);
+	  document.removeEventListener('mouseup', onBarDragEnd);
+	  
+	  // クラスを削除
+	  dragBarElement.classList.remove('dragging');
+	  
+	  try {
+	    // ドロップ先のタイムラインを特定
+	    let targetTimeline = currentDropTarget || dragBarOriginalPosition.timeline;
+	    let targetEquipmentId = targetTimeline.dataset.equipment;
+	    let targetLocation = targetTimeline.dataset.location || '';
+	    
+	    // targetEquipmentIdが存在しない場合は元のデータを使用
+	    if (!targetEquipmentId) {
+	      targetEquipmentId = dragBarOriginalPosition.equipmentId;
+	      targetLocation = dragBarOriginalPosition.location || '';
+	    }
+	    
+	    // ドロップ先の詳細を計算
+	    const newLeft = parseInt(dragBarElement.style.left, 10);
+	    // モバイルとPCでセルサイズを変更
+	    const cellWidth = document.body.classList.contains('mobile-view') ? 
+	                    (userSettings.mobileCellWidth || 80) : 
+	                    (userSettings.cellWidth || 80);
+	    
+	    // 新しい開始インデックスを計算
+	    const startIdx = Math.floor(newLeft / cellWidth);
+	    
+	    // 日付配列から対応する日付を取得
+	    const dayCells = Array.from(targetTimeline.querySelectorAll('.gantt-day'));
+	    if (startIdx >= dayCells.length || startIdx < 0) {
+	      // 範囲外ならキャンセル
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    const startDateStr = dayCells[startIdx].dataset.date;
+	    
+	    if (!startDateStr) {
+	      // 日付が取得できなければキャンセル
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    // 元の借用日数を計算
+	    const origStartDate = new Date(dragBarOriginalPosition.startDate);
+	    const origEndDate = new Date(dragBarOriginalPosition.endDate);
+	    
+	    // 日付が有効かチェック
+	    if (isNaN(origStartDate.getTime()) || isNaN(origEndDate.getTime())) {
+	      console.error('無効な元の日付', dragBarOriginalPosition.startDate, dragBarOriginalPosition.endDate);
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    // 日数差を計算（ミリ秒→日に変換、端数を四捨五入）
+	    const daysDiff = Math.round((origEndDate - origStartDate) / (1000 * 60 * 60 * 24));
+	    console.log(`元の借用期間: ${daysDiff}日間`);
+	    
+	    // 新しい開始日を取得
+	    const newStartDate = new Date(startDateStr);
+	    
+	    // 新しい終了日を計算（開始日 + 元の日数差）
+	    const newEndDate = new Date(newStartDate);
+	    newEndDate.setDate(newStartDate.getDate() + daysDiff);
+	    
+	    // 終了日が表示範囲内かチェック
+	    const lastDayCell = dayCells[dayCells.length - 1];
+	    if (!lastDayCell) {
+	      console.error('日付セルが見つかりません');
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    const lastDateStr = lastDayCell.dataset.date;
+	    if (!lastDateStr) {
+	      console.error('最終日の日付が取得できません');
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    const lastDate = new Date(lastDateStr);
+	    
+	    if (newEndDate > lastDate) {
+	      alert('表示範囲外の日付になるため変更できません');
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    // 終了日の文字列を取得
+	    const endDateStr = formatDate(newEndDate);
+	    
+	    console.log(`新しい借用期間: ${startDateStr} ～ ${endDateStr}`);
+	    
+	    // 変更前の機材IDと定置場所を記録
+	    const oldEquipmentId = dragBarOriginalPosition.equipmentId;
+	    const oldLocation = dragBarOriginalPosition.location || '';
+	    
+	    // スクロール位置を保存（元の位置を維持するため）
+	    const container = document.querySelector('.gantt-container');
+	    const originalScrollPosition = {
+	      top: container ? container.scrollTop : 0,
+	      left: container ? container.scrollLeft : 0
+	    };
+	    
+	    // 変更内容の確認ダイアログ
+	    showRentalUpdateConfirmation(
+	      dragBarElement.dataset.rentalId,
+	      oldEquipmentId,
+	      targetEquipmentId,
+	      startDateStr,
+	      endDateStr,
+	      oldLocation,
+	      targetLocation,
+	      function() {
+	        // 成功時のコールバック - スクロール位置を復元
+	        if (container) {
+	          container.scrollTop = originalScrollPosition.top;
+	          container.scrollLeft = originalScrollPosition.left;
+	        }
+	      }
+	    );
+	  } catch (error) {
+	    console.error('ドラッグ終了処理エラー:', error);
+	    resetBarPosition();
+	  }
+	  
+	  // ハイライトを削除
+	  removeDropTargetHighlight();
+	  
+	  // ドラッグ変数をリセット
+	  isDraggingBar = false;
+	  dragBarElement = null;
+	  dragBarStartX = 0;
+	  dragBarOriginalPosition = null;
+	  dragBarData = null;
+	  currentDropTarget = null;
+	}
+
+  // バーリサイズのマウス移動ハンドラ
+  function onBarResizeMove(e) {
+    if (!isResizingBar || !dragBarElement || !dragBarOriginalPosition) return;
+    
+    e.preventDefault();
+    
+    const deltaX = e.clientX - dragBarStartX;
+    // モバイルとPCでセルサイズを変更
+    const cellWidth = document.body.classList.contains('mobile-view') ? 
+                    (userSettings.mobileCellWidth || 80) : 
+                    (userSettings.cellWidth || 80);
+    
+    if (dragBarMode === 'resize-start') {
+      // 左側のリサイズ（開始日を変更）
+      const maxDelta = dragBarOriginalPosition.width - cellWidth; // 最低1セルは残す
+      const constrainedDelta = Math.min(maxDelta, Math.max(-dragBarOriginalPosition.left, deltaX));
+      
+      const newLeft = dragBarOriginalPosition.left + constrainedDelta;
+      const newWidth = dragBarOriginalPosition.width - constrainedDelta;
+      
+      dragBarElement.style.left = newLeft + 'px';
+      dragBarElement.style.width = newWidth + 'px';
+    } else if (dragBarMode === 'resize-end') {
+      // 右側のリサイズ（終了日を変更）
+      const timelineWidth = dragBarOriginalPosition.timelineRect.width;
+      const maxRight = timelineWidth;
+      const currentRight = dragBarOriginalPosition.left + dragBarOriginalPosition.width;
+      
+      const maxDelta = maxRight - currentRight;
+      const minDelta = cellWidth - dragBarOriginalPosition.width; // 最低1セルは残す
+      
+      const constrainedDelta = Math.min(maxDelta, Math.max(minDelta, deltaX));
+      const newWidth = dragBarOriginalPosition.width + constrainedDelta;
+      
+      dragBarElement.style.width = newWidth + 'px';
+    }
+  }
+
+  // バーリサイズの終了ハンドラ
+	function onBarResizeEnd(e) {
+	  if (!isResizingBar || !dragBarElement || !dragBarOriginalPosition) return;
+	  
+	  e.preventDefault();
+	  
+	  // グローバルイベントを削除
+	  document.removeEventListener('mousemove', onBarResizeMove);
+	  document.removeEventListener('mouseup', onBarResizeEnd);
+	  
+	  // クラスを削除
+	  dragBarElement.classList.remove('resizing');
+	  
+	  try {
+	    // リサイズ後の詳細を計算
+	    const newLeft = parseInt(dragBarElement.style.left, 10);
+	    const width = parseInt(dragBarElement.style.width, 10);
+	    // モバイルとPCでセルサイズを変更
+	    const cellWidth = document.body.classList.contains('mobile-view') ? 
+	                    (userSettings.mobileCellWidth || 80) : 
+	                    (userSettings.cellWidth || 80);
+	    
+	    // 新しい開始インデックスと終了インデックスを計算
+	    const startIdx = Math.floor(newLeft / cellWidth);
+	    const endIdx = Math.floor((newLeft + width - 1) / cellWidth);
+	    
+	    // 日付配列から対応する日付を取得
+	    const timeline = dragBarOriginalPosition.timeline;
+	    const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
+	    
+	    if (startIdx >= dayCells.length || endIdx >= dayCells.length || startIdx < 0 || endIdx < 0) {
+	      // 範囲外ならキャンセル
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    const startDateStr = dayCells[startIdx].dataset.date;
+	    const endDateStr = dayCells[endIdx].dataset.date;
+	    
+	    if (!startDateStr || !endDateStr) {
+	      // 日付が取得できなければキャンセル
+	      resetBarPosition();
+	      return;
+	    }
+	    
+	    // データの準備
+	    const equipmentId = dragBarOriginalPosition.equipmentId;
+	    const location = dragBarOriginalPosition.location || '';
+	    const rentalId = dragBarElement.dataset.rentalId;
+	    
+	    // スクロール位置を保存（元の位置を維持するため）
+	    const container = document.querySelector('.gantt-container');
+	    const originalScrollPosition = {
+	      top: container ? container.scrollTop : 0,
+	      left: container ? container.scrollLeft : 0
+	    };
+	    
+	    // 変更内容の確認ダイアログ
+	    showRentalUpdateConfirmation(
+	      rentalId, 
+	      equipmentId, 
+	      equipmentId, 
+	      startDateStr, 
+	      endDateStr, 
+	      location, 
+	      location,
+	      function() {
+	        // 成功時のコールバック - スクロール位置を復元
+	        if (container) {
+	          container.scrollTop = originalScrollPosition.top;
+	          container.scrollLeft = originalScrollPosition.left;
+	        }
+	      }
+	    );
+	  } catch (error) {
+	    console.error('リサイズ終了処理エラー:', error);
+	    resetBarPosition();
+	  }
+	  
+	  // リサイズ変数をリセット
+	  isResizingBar = false;
+	  dragBarElement = null;
+	  dragBarStartX = 0;
+	  dragBarStartWidth = 0;
+	  dragBarOriginalPosition = null;
+	  dragBarData = null;
+	  dragBarMode = null;
+	}
+
+	// スクロール位置を保存する関数
+function saveScrollPosition() {
+  // モバイルビューモードでのみ適用
+  if (!document.body.classList.contains('mobile-view')) return;
+  
+  const dateHeaders = document.querySelector('.gantt-dates');
+  const timelinesColumn = document.querySelector('.gantt-timelines-column');
+  
+  if (dateHeaders && timelinesColumn) {
+    savedScrollPosition = {
+      left: dateHeaders.scrollLeft,
+      top: timelinesColumn.scrollTop
+    };
+    
+    // ローカルストレージへの保存（永続化したい場合）
+    try {
+      localStorage.setItem('ganttScrollPosition', JSON.stringify(savedScrollPosition));
+    } catch (e) {
+      console.error('スクロール位置の保存に失敗:', e);
+    }
+  }
+}
+
+  // バーの位置をリセットする関数
+  function resetBarPosition() {
+    if (!dragBarElement || !dragBarOriginalPosition) return;
+    
+    dragBarElement.style.left = dragBarOriginalPosition.left + 'px';
+    dragBarElement.style.width = dragBarOriginalPosition.width + 'px';
+  }
+
+  // ドロップターゲットをハイライトする関数
+  function highlightDropTarget(e) {
+    // すべてのハイライトをクリア
+    removeDropTargetHighlight();
+    
+    // マウス位置の要素を取得
+    const elementsFromPoint = document.elementsFromPoint(e.clientX, e.clientY);
+    
+    // タイムラインを検索
+    for (const element of elementsFromPoint) {
+      if (element.classList.contains('gantt-timeline')) {
+        // 現在のタイムラインと異なる場合のみハイライト
+        if (element !== dragBarOriginalPosition.timeline) {
+          element.classList.add('drop-target');
+          currentDropTarget = element;
+        }
+        break;
+      }
+    }
+  }
+
+  // ドロップターゲットのハイライトを削除する関数
+  function removeDropTargetHighlight() {
+    document.querySelectorAll('.gantt-timeline.drop-target').forEach(el => {
+      el.classList.remove('drop-target');
+    });
+    currentDropTarget = null;
+  }
+  
+  // 貸出変更確認ダイアログを表示する関数
+  function showRentalUpdateConfirmation(rentalId, oldEquipmentId, newEquipmentId, startDateStr, endDateStr, oldLocation, newLocation, successCallback) {
+    // 機材情報の取得
+    const oldEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(oldEquipmentId));
+    const newEquipment = equipmentList.find(item => String(item['機器管理番号']) === String(newEquipmentId));
+    
+    if (!oldEquipment || !newEquipment) {
+      alert('機材情報の取得に失敗しました');
+      resetBarPosition();
+      return;
+    }
+    
+    // 貸出情報の取得
+    const rental = rentalData.find(item => item['登録日時'] && item['登録日時'].toString() === rentalId);
+    
+    if (!rental) {
+      alert('貸出情報の取得に失敗しました');
+      resetBarPosition();
+      return;
+    }
+    
+    // 機材変更の場合は台数制限の確認
+    if (oldEquipmentId !== newEquipmentId || oldLocation !== newLocation) {
+      // 新しい機材の総台数を確認
+      const newEquipItems = equipmentList.filter(item => 
+        String(item['機器管理番号']) === String(newEquipmentId) && 
+        String(item['定置場所'] || '') === String(newLocation)
+      );
+      
+      const totalQuantity = newEquipItems.reduce((sum, item) => sum + (parseInt(item['総台数']) || 0), 0);
+      const requestedQuantity = parseInt(rental['数量']) || 1;
+      
+      if (requestedQuantity > totalQuantity) {
+        alert(`${newEquipment['機器名称']}(${newLocation})の総台数(${totalQuantity}台)を超えています。変更する場合は貸出数量を調整してください。`);
+        resetBarPosition();
+        return;
+      }
+    }
+    
+    // 日付の妥当性チェック
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    
+    if (startDate > endDate) {
+      alert('開始日は終了日よりも前の日付にしてください');
+      resetBarPosition();
+      return;
+    }
+    
+    // 貸出可能性のチェック
+    if (!checkAvailabilityForUpdate(newEquipmentId, startDateStr, endDateStr, rental['数量'], rentalId, newLocation)) {
+      resetBarPosition();
+      return;
+    }
+    
+    // 確認ダイアログの表示有無を確認
+    if (userSettings.showConfirmDialog) {
+      // 確認メッセージを構築
+      let message = '以下の内容で貸出情報を更新しますか？\n\n';
+      
+      if (oldEquipmentId !== newEquipmentId) {
+        message += `機材: ${oldEquipment['機器名称']} → ${newEquipment['機器名称']}\n`;
+      }
+      
+      if (oldLocation !== newLocation) {
+        message += `定置場所: ${oldLocation || '未設定'} → ${newLocation || '未設定'}\n`;
+      }
+      
+      message += `期間: ${formatDate(new Date(rental['借用開始日']))} ～ ${formatDate(new Date(rental['借用終了日']))}\n`;
+      message += `　 → ${startDateStr} ～ ${endDateStr}\n`;
+      message += `数量: ${rental['数量']}台\n`;
+      message += `使用場所: ${rental['使用場所']}\n`;
+      
+      // 確認ダイアログを表示
+      if (confirm(message)) {
+        // 更新処理を実行
+        updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
+      } else {
+        // キャンセルの場合は元の位置に戻す
+        resetBarPosition();
+      }
+    } else {
+      // 確認なしで直接更新
+      updateRental(rentalId, newEquipmentId, newEquipment['機器名称'], startDateStr, endDateStr, rental['数量'], rental['使用場所'], newLocation, successCallback);
+    }
+  }
+
+  // 貸出更新時の貸出可能性チェック（重複・台数チェック）
+  function checkAvailabilityForUpdate(equipmentId, startDate, endDate, requestedQuantity, excludeRentalId, location) {
+    try {
+      // 機材情報取得 - 機器管理番号と定置場所で検索
+      const equipItems = equipmentList.filter(item => 
+        String(item['機器管理番号']) === String(equipmentId) &&
+        String(item['定置場所'] || '') === String(location || '')
+      );
+      if (equipItems.length === 0) {
+        alert('機材情報の取得に失敗しました');
+        return false;
+      }
+      
+      // 指定した定置場所の機材の総台数を合計
+      const totalQuantity = equipItems.reduce((sum, item) => sum + (parseInt(item['総台数']) || 0), 0);
+      
+      // 日付範囲
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+      
+      // 各日にちで利用可能数チェック
+      let currentDate = new Date(start);
+      let availabilityIssues = [];
+      
+      while (currentDate <= end) {
+        const dateStr = formatDate(currentDate);
+        let rentedQuantity = 0;
+        
+        // この日付で貸出中の数量を計算
+        rentalData.forEach(rental => {
+          if (!rental) return;
+          
+          // 自分自身の貸出は除外
+          if (rental['登録日時'] && rental['登録日時'].toString() === excludeRentalId) {
+            return;
+          }
+          
+          // この機材の貸出（機器管理番号 AND 定置場所が一致する）
+          if (String(rental['機器管理番号']) === String(equipmentId) && 
+              String(rental['貸出元'] || '') === String(location || '')) {
+              
+            // ステータスが返却済みの場合はスキップ
+            if (rental['ステータス'] === '返却済み') return;
+            
+            // 返却日がある場合も返却済みとみなしてスキップ
+            if (rental['返却日'] && rental['ステータス'] === '返却済み') return;
+            
+            // 日付型変換
+            let rentalStart = parseDate(rental['借用開始日']);
+            let rentalEnd = parseDate(rental['借用終了日']);
+            
+            // 日付有効性チェック
+            if (!rentalStart || !rentalEnd) {
+              return;
+            }
+            
+            // 日付範囲チェック
+            if (rentalStart <= currentDate && rentalEnd >= currentDate) {
+              rentedQuantity += parseInt(rental['数量']) || 0;
+            }
+          }
+        });
+        
+        // 利用可能数チェック
+        const availableQuantity = totalQuantity - rentedQuantity;
+        
+        if (requestedQuantity > availableQuantity) {
+          availabilityIssues.push({
+            date: dateStr,
+            available: availableQuantity,
+            requested: requestedQuantity
+          });
+        }
+        
+        // 次の日へ
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // 利用可能性の問題がある場合
+      if (availabilityIssues.length > 0) {
+        let message = '以下の日付で貸出可能台数を超えています：\n\n';
+        
+        availabilityIssues.forEach(issue => {
+          message += `${issue.date}: 利用可能台数 ${issue.available}台（要求: ${issue.requested}台）\n`;
+        });
+        
+        message += '\n貸出数量を調整するか、日付を変更してください。';
+        
+        alert(message);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('貸出可能チェックエラー:', error);
+      alert('貸出可能性のチェックに失敗しました: ' + error);
+      return false;
     }
   }
   
-  // スクロール位置復元
-  function restoreScrollPosition() {
+  // 貸出データを更新する関数
+  function updateRental(rentalId, equipmentId, equipmentName, startDate, endDate, quantity, location, sourceLocation, successCallback) {
+	  try {
+	    console.log('貸出更新開始');
+	    
+	    // スクロール位置を保存
+	    const ganttContainer = document.querySelector('.gantt-container');
+	    const savedScrollLeft = ganttContainer ? ganttContainer.scrollLeft : 0;
+	    const savedScrollTop = ganttContainer ? ganttContainer.scrollTop : 0;
+	    
+	    // データ準備
+	    const data = {
+	      rentalId: rentalId,
+	      equipmentId: equipmentId,
+	      equipmentName: equipmentName,
+	      startDate: startDate,
+	      endDate: endDate,
+	      quantity: quantity,
+	      location: location,
+	      sourceLocation: sourceLocation // 貸出元の定置場所
+	    };
+	    
+	    console.log('送信データ:', data);
+	    
+	    // 更新API実行
+	    showLoading();
+	    google.script.run
+	      .withSuccessHandler(function(response) {
+	        hideLoading();
+	        
+	        if (response && response.success) {
+	          // 成功処理
+	          console.log('更新成功:', response);
+	          
+	          // Undoスタック追加
+	          undoStack.push({
+	            action: 'undoUpdate',
+	            id: rentalId,
+	            previousData: dragBarData
+	          });
+	          
+	          // Undoボタン有効化
+	          const undoButton = document.getElementById('undo-button');
+	          if (undoButton) undoButton.disabled = false;
+	          
+	          // データ再読み込み
+	          google.script.run
+	            .withSuccessHandler(function(rentalDataResponse) {
+	              if (rentalDataResponse && Array.isArray(rentalDataResponse)) {
+	                // 日付文字列をDateオブジェクトに変換して保存
+	                rentalData = rentalDataResponse.map(item => {
+	                  Object.keys(item).forEach(key => {
+	                    if (key === '借用開始日' || key === '借用終了日' || key === '登録日時' || key === '返却日') {
+	                      if (item[key] && typeof item[key] === 'string') {
+	                        item[key] = new Date(item[key]);
+	                      }
+	                    }
+	                  });
+	                  
+	                  if (!item['ステータス']) {
+	                    item['ステータス'] = item['返却日'] ? '返却済み' : '貸出中';
+	                  }
+	                  
+	                  return item;
+	                });
+	              } else {
+	                rentalData = [];
+	              }
+	              
+	              // スクロール位置が変わらないようにフラグをセット
+	              skipScrollToSelectedEquipment = true;
+	              
+	              // ガントチャート更新
+	              updateGanttChart();
+	              
+	              // スクロール位置を復元
+	              setTimeout(() => {
+	                if (ganttContainer) {
+	                  ganttContainer.scrollLeft = savedScrollLeft;
+	                  ganttContainer.scrollTop = savedScrollTop;
+	                }
+	                
+	                // フラグをリセット
+	                skipScrollToSelectedEquipment = false;
+	                
+	                // 成功時のコールバックがあれば実行
+	                if (typeof successCallback === 'function') {
+	                  successCallback();
+	                }
+	              }, 100);
+	            })
+	            .withFailureHandler(function(error) {
+	              console.error('貸出データ再取得失敗:', error);
+	              
+	              // スクロール位置が変わらないようにフラグをセット
+	              skipScrollToSelectedEquipment = true;
+	              
+	              // ガントチャート更新
+	              updateGanttChart();
+	              
+	              // スクロール位置を復元
+	              setTimeout(() => {
+	                if (ganttContainer) {
+	                  ganttContainer.scrollLeft = savedScrollLeft;
+	                  ganttContainer.scrollTop = savedScrollTop;
+	                }
+	                
+	                // フラグをリセット
+	                skipScrollToSelectedEquipment = false;
+	                
+	                // 失敗時もコールバックを実行
+	                if (typeof successCallback === 'function') {
+	                  successCallback();
+	                }
+	              }, 100);
+	            })
+	            .getRentalData();
+	          
+	          // 成功メッセージ
+	          if (userSettings.showConfirmDialog) {
+	            alert('貸出情報を更新しました');
+	          }
+	        } else {
+	          // 失敗処理
+	          console.error('更新失敗:', response);
+	          resetBarPosition();
+	          alert('貸出更新に失敗しました: ' + (response ? response.error : '不明なエラー'));
+	        }
+	      })
+	      .withFailureHandler(function(error) {
+	        hideLoading();
+	        console.error('更新エラー:', error);
+	        resetBarPosition();
+	        alert('貸出更新に失敗しました: ' + error);
+	      })
+	      .updateRental(data);
+	  } catch (error) {
+	    console.error('貸出更新エラー:', error);
+	    resetBarPosition();
+	    alert('貸出更新処理でエラーが発生しました: ' + error);
+	  }
+	}
+  
+  
+  
+  // スクロール位置を復元する関数
+	function restoreScrollPosition() {
+	  const container = document.querySelector('.gantt-container');
+	  if (container && savedScrollPosition) {
+	    container.scrollTop = savedScrollPosition.top;
+	    container.scrollLeft = savedScrollPosition.left;
+	  }
+	}
+  
+  // モバイル対応の設定
+  function setupMobileSupport() {
     try {
-      const container = document.querySelector('.gantt-container');
-      if (container && savedScrollPosition) {
-        container.scrollTop = savedScrollPosition.top;
-        container.scrollLeft = savedScrollPosition.left;
+      // デバイスがモバイルかどうかを判定
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      // モバイル設定を読み込む
+      loadMobileSettings();
+      
+      // モバイルデバイスでは自動的にモバイルビューに切り替え
+      if (isMobile && !document.body.classList.contains('mobile-view')) {
+        document.body.classList.add('mobile-view');
+      }
+      
+      // PCに戻すボタン設定
+      document.getElementById('return-to-desktop')?.addEventListener('click', function() {
+        document.body.classList.remove('mobile-view');
+        updateMobileSettings();
+        // スクロール位置をリセット
+        savedScrollPosition = { top: 0, left: 0 };
+        updateGanttChart();
+      });
+      
+      // 文字サイズスライダー設定
+      const fontSizeSlider = document.getElementById('font-size-slider');
+      if (fontSizeSlider) {
+        // 保存された値を設定（デフォルト値は30）
+        const savedFontSize = localStorage.getItem('mobileFontSize') || '30';
+        fontSizeSlider.value = savedFontSize;
+        fontSizeSlider.min = "24"; // 最小値を24に設定
+        fontSizeSlider.max = "48"; // 最大値を48に設定
+        updateFontSize(savedFontSize);
+        
+        // スライダー変更イベント
+        fontSizeSlider.addEventListener('input', function(e) {
+          const fontSize = e.target.value;
+          updateFontSize(fontSize);
+          localStorage.setItem('mobileFontSize', fontSize);
+        });
+      }
+      // タッチデバイスなら長押し選択モードを有効化
+      if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        setupLongPressSelection();
+        setupCalendarSwipe();
       }
     } catch (error) {
-      console.error('スクロール位置復元エラー:', error);
+      console.error('モバイル対応設定エラー:', error);
     }
   }
+
+  // 文字サイズの更新とそれに応じたレイアウト調整
+	function updateFontSize(fontSize) {
+	  // フォントサイズをルート要素に適用
+	  document.documentElement.style.fontSize = fontSize + 'px';
+	  
+	  // PC・モバイル共通の文字サイズ調整
+	  const elements = document.querySelectorAll('.gantt-item, .equipment-name, .equipment-location, .equipment-stock, .equipment-detail');
+	  elements.forEach(el => {
+	    el.style.fontSize = `${fontSize}px`;
+	  });
+	  
+	  // 日付ヘッダーのフォントサイズ調整
+	  document.querySelectorAll('.gantt-date').forEach(el => {
+	    el.style.fontSize = `${Math.max(10, parseInt(fontSize) * 0.9)}px`;
+	  });
+	  
+	  // レンタルバーのフォントサイズ調整
+	  document.querySelectorAll('.rental-bar').forEach(el => {
+	    el.style.fontSize = `${parseInt(fontSize) * 0.9}px`;
+	    
+	    // バーの高さも調整
+	    if (document.body.classList.contains('mobile-view')) {
+	      // モバイル表示の場合はより大きく
+	      const newHeight = Math.max(30, parseInt(fontSize) * 2);
+	      el.style.height = `${newHeight}px`;
+	      el.style.lineHeight = `${newHeight - 10}px`;
+	    } else {
+	      // PC表示の場合は適度なサイズに
+	      const newHeight = Math.max(25, parseInt(fontSize) * 1.5);
+	      el.style.height = `${newHeight}px`;
+	      el.style.lineHeight = `${newHeight - 10}px`;
+	    }
+	  });
+	  
+	  // ガントチャートを再描画（レイアウト修正のため）
+	  setTimeout(() => {
+	    const ganttContainer = document.querySelector('.gantt-container');
+	    if (ganttContainer) {
+	      // スクロール位置を保存
+	      const savedScrollLeft = ganttContainer.scrollLeft;
+	      const savedScrollTop = ganttContainer.scrollTop;
+	      
+	      // 再描画
+	      updateGanttChart();
+	      
+	      // スクロール位置を復元
+	      setTimeout(() => {
+	        ganttContainer.scrollLeft = savedScrollLeft;
+	        ganttContainer.scrollTop = savedScrollTop;
+	      }, 100);
+	    }
+	  }, 200);
+	}
+
+	// スライダーの設定
+	function setupMobileSupport() {
+	  try {
+	    // デバイスがモバイルかどうかを判定
+	    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+	    
+	    // モバイル設定を読み込む
+	    loadMobileSettings();
+	    
+	    // モバイルデバイスでは自動的にモバイルビューに切り替え
+	    if (isMobile && !document.body.classList.contains('mobile-view')) {
+	      document.body.classList.add('mobile-view');
+	    }
+	    
+	    // PCに戻すボタン設定
+	    document.getElementById('return-to-desktop')?.addEventListener('click', function() {
+	      document.body.classList.remove('mobile-view');
+	      updateMobileSettings();
+	      // スクロール位置をリセット
+	      savedScrollPosition = { top: 0, left: 0 };
+	      updateGanttChart();
+	    });
+	    
+	    // 文字サイズスライダー設定
+	    const fontSizeSlider = document.getElementById('font-size-slider');
+	    if (fontSizeSlider) {
+	      // 保存された値を設定（デフォルト値は30）
+	      const savedFontSize = localStorage.getItem('mobileFontSize') || '30';
+	      fontSizeSlider.value = savedFontSize;
+	      fontSizeSlider.min = "24"; // 最小値を24に設定
+	      fontSizeSlider.max = "48"; // 最大値を48に設定
+	      updateFontSize(savedFontSize);
+	      
+	      // スライダー変更イベント
+	      fontSizeSlider.addEventListener('input', function(e) {
+	        const fontSize = e.target.value;
+	        updateFontSize(fontSize);
+	        localStorage.setItem('mobileFontSize', fontSize);
+	      });
+	    }
+	    // タッチデバイスなら長押し選択モードを有効化
+	    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+	      setupLongPressSelection();
+	      setupCalendarSwipe();
+	    }
+	  } catch (error) {
+	    console.error('モバイル対応設定エラー:', error);
+	  }
+	}
+
+  // モバイル設定を保存
+  function updateMobileSettings() {
+    try {
+      const isMobileView = document.body.classList.contains('mobile-view');
+      localStorage.setItem('mobileView', isMobileView ? 'true' : 'false');
+    } catch (error) {
+      console.error('モバイル設定保存エラー:', error);
+    }
+  }
+
+  // モバイル設定を読み込む
+  function loadMobileSettings() {
+    try {
+      const mobileView = localStorage.getItem('mobileView');
+      if (mobileView === 'true') {
+        document.body.classList.add('mobile-view');
+      } else if (mobileView === 'false') {
+        document.body.classList.remove('mobile-view');
+      }
+    } catch (error) {
+      console.error('モバイル設定読み込みエラー:', error);
+    }
+  }
+
+  // 長押し選択モードの設定
+  function setupLongPressSelection() {
+    try {
+      const ganttContainer = document.querySelector('.gantt-container');
+      if (!ganttContainer) return;
+      
+      // 長押し判定用変数
+      let longPressTimer = null;
+      let isLongPressing = false;
+      let longPressStartElement = null;
+      let longPressStartDate = null;
+      let longPressEndDate = null;
+      
+      // タッチ開始
+      ganttContainer.addEventListener('touchstart', function(e) {
+        // 既にドラッグ操作中は何もしない
+        if (isDraggingBar || isResizingBar) return;
+        
+        // 貸出バーの場合は通常のクリックイベントを処理
+        if (e.target.classList.contains('rental-bar') || 
+            e.target.closest('.rental-bar')) {
+          return;
+        }
+        
+        // 機材情報部分なら通常スクロール
+        if (e.target.closest('.gantt-item')) {
+          return;
+        }
+        
+        const touch = e.touches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        // ガントチャートのセルだけを対象にする
+        if (element && element.classList.contains('gantt-day')) {
+          // 長押し判定用タイマー
+          longPressTimer = setTimeout(function() {
+            // バイブレーション（利用可能な場合）
+            if (navigator.vibrate) {
+              navigator.vibrate(50);
+            }
+            
+            isLongPressing = true;
+            longPressStartElement = element;
+            longPressStartDate = element.dataset.date;
+            longPressEndDate = element.dataset.date;
+            
+            // 最初のセルをハイライト
+            element.classList.add('touch-selection');
+          }, 500); // 500ms長押しで選択モード開始
+        }
+      });
+      
+      // タッチ移動
+      ganttContainer.addEventListener('touchmove', function(e) {
+        // 長押し中でない場合は通常スクロール
+        if (!isLongPressing) return;
+        
+        e.preventDefault(); // スクロールを防止
+        
+        const touch = e.touches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        // ガントチャートのセルだけを対象にする
+        if (element && element.classList.contains('gantt-day')) {
+          // 現在の日付を取得
+          const currentDate = element.dataset.date;
+          
+          if (currentDate) {
+            // 終了日を更新
+            longPressEndDate = currentDate;
+            
+            // 同じタイムラインのセルを取得
+            const timeline = element.closest('.gantt-timeline');
+            if (timeline) {
+              const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
+              
+              // 全てのハイライトを消去
+              dayCells.forEach(cell => {
+                cell.classList.remove('touch-selection');
+              });
+              
+              // 開始日と終了日を日付オブジェクトに変換
+              const startDate = new Date(longPressStartDate);
+              const endDate = new Date(longPressEndDate);
+              
+              // 日付順に並び替え
+              const minDate = startDate < endDate ? startDate : endDate;
+              const maxDate = startDate > endDate ? startDate : endDate;
+              
+              // 範囲内のセルをハイライト
+              dayCells.forEach(cell => {
+                if (!cell.dataset.date) return;
+                
+                const cellDate = new Date(cell.dataset.date);
+                if (cellDate >= minDate && cellDate <= maxDate) {
+                  cell.classList.add('touch-selection');
+                }
+              });
+            }
+          }
+        }
+      }, { passive: false });
+      
+      // タッチ終了
+      ganttContainer.addEventListener('touchend', function(e) {
+        // 長押しタイマーをクリア
+        clearTimeout(longPressTimer);
+        
+        // 長押し中でない場合は何もしない
+        if (!isLongPressing) return;
+        
+        try {
+          // 開始日と終了日を取得
+          if (longPressStartDate && longPressEndDate) {
+            const startDate = new Date(longPressStartDate);
+            const endDate = new Date(longPressEndDate);
+            
+            // 日付順に並び替え
+            const fromDate = startDate <= endDate ? longPressStartDate : longPressEndDate;
+            const toDate = startDate > endDate ? longPressStartDate : longPressEndDate;
+            
+            // 機材情報を取得
+            const timeline = longPressStartElement.closest('.gantt-timeline');
+            if (timeline) {
+              const equipmentId = timeline.dataset.equipment;
+              const location = timeline.dataset.location || '';
+              
+              // ハイライトを削除
+              const dayCells = Array.from(timeline.querySelectorAll('.gantt-day'));
+              dayCells.forEach(cell => {
+                cell.classList.remove('touch-selection');
+              });
+              
+              // 貸出モーダルを表示
+              if (fromDate && toDate && equipmentId) {
+                showRentalModal(equipmentId, fromDate, toDate, location);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('長押し選択終了エラー:', error);
+        }
+        
+        // 長押し状態をリセット
+        isLongPressing = false;
+        longPressStartElement = null;
+        longPressStartDate = null;
+        longPressEndDate = null;
+      });
+      
+      // キャンセル時
+      ganttContainer.addEventListener('touchcancel', function(e) {
+        clearTimeout(longPressTimer);
+        
+        // ハイライトを削除
+        document.querySelectorAll('.touch-selection').forEach(cell => {
+          cell.classList.remove('touch-selection');
+        });
+        
+        // 状態をリセット
+        isLongPressing = false;
+        longPressStartElement = null;
+        longPressStartDate = null;
+        longPressEndDate = null;
+      });
+    } catch (error) {
+      console.error('長押し選択モード設定エラー:', error);
+    }
+  }
+  
+  // カレンダーのスワイプ機能を設定
+function setupCalendarSwipe() {
+  const headerDates = document.querySelector('.gantt-dates');
+  const timelinesColumn = document.querySelector('.gantt-timelines-column');
+  
+  if (!headerDates || !timelinesColumn) return;
+  
+  let startX = 0;
+  let startY = 0;
+  let startScrollLeft = 0;
+  let startScrollTop = 0;
+  let isDragging = false;
+  let touchStartTime = 0;
+  let initialDirection = null; // 'horizontal' または 'vertical'
+  
+  // モバイル用のタッチイベント
+  headerDates.addEventListener('touchstart', handleTouchStart, { passive: false });
+  timelinesColumn.addEventListener('touchstart', handleTouchStart, { passive: false });
+  
+  function handleTouchStart(e) {
+    isSwiping = true;
+    isDragging = true;
+    touchStartTime = Date.now();
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    startScrollLeft = this === headerDates ? headerDates.scrollLeft : timelinesColumn.scrollLeft;
+    startScrollTop = this === headerDates ? 0 : timelinesColumn.scrollTop;
+    initialDirection = null; // 初期化
+    
+    // イベントリスナーを追加
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+  }
+  
+  function handleTouchMove(e) {
+    if (!isDragging) return;
+    
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = startX - currentX;
+    const deltaY = startY - currentY;
+    
+    // 初回のタッチ移動で方向を決定（縦か横か）
+    if (initialDirection === null) {
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        initialDirection = 'horizontal';
+      } else {
+        initialDirection = 'vertical';
+      }
+    }
+    
+    // 横方向のスワイプの場合
+    if (initialDirection === 'horizontal') {
+      e.preventDefault(); // スクロールの既定の動作を防止
+      
+      // 両方のコンテナを同期してスクロール
+      const newScrollLeft = startScrollLeft + deltaX;
+      headerDates.scrollLeft = newScrollLeft;
+      timelinesColumn.scrollLeft = newScrollLeft;
+    }
+    // 縦方向のスワイプの場合はブラウザの既定のスクロールを活用（ここでは何もしない）
+  }
+
+  // 4. 前の期間へ移動関数の修正
+function moveToPreviousPeriod() {
+  const newDate = new Date(startDate);
+  newDate.setDate(newDate.getDate() - 13); // 13日前に移動
+  startDate = newDate;
+  updateGanttChart();
+  
+  // スライダーを左に設定
+  const slider = document.getElementById('date-slider');
+  if (slider) {
+    slider.value = 0;
+  }
+}
+function handleTouchEnd(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    
+    const endTime = Date.now();
+    const timeElapsed = endTime - touchStartTime;
+    const currentX = e.changedTouches[0].clientX;
+    const deltaX = startX - currentX;
+    
+    // 慣性スクロールのシミュレーション（横方向の場合のみ）
+    if (initialDirection === 'horizontal' && Math.abs(deltaX) > 20 && timeElapsed < 300) {
+      // スワイプの勢いを計算
+      const velocity = deltaX / timeElapsed;
+      // 慣性の強さと持続時間を決定
+      const momentum = velocity * 300; // 300はスクロールの持続時間（ミリ秒）
+      
+      // スムーズなスクロールアニメーション
+      const targetScroll = Math.max(0, headerDates.scrollLeft + momentum);
+      
+      // 減速しながらスクロールするアニメーション
+      const startValue = headerDates.scrollLeft;
+      const changeInValue = targetScroll - startValue;
+      const duration = 300;
+      const startTime = Date.now();
+      
+      function animateScroll() {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        
+        if (elapsed >= duration) {
+          headerDates.scrollLeft = targetScroll;
+          timelinesColumn.scrollLeft = targetScroll;
+          return;
+        }
+        
+        // イージング関数で減速効果を付ける
+        const t = elapsed / duration;
+        const easeOut = 1 - Math.pow(1 - t, 3); // cubic ease-out
+        
+        const currentPosition = startValue + changeInValue * easeOut;
+        headerDates.scrollLeft = currentPosition;
+        timelinesColumn.scrollLeft = currentPosition;
+        
+        requestAnimationFrame(animateScroll);
+      }
+      
+      requestAnimationFrame(animateScroll);
+    }
+    
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+    
+    // スワイプ終了時刻を記録（モーダル表示抑制用）
+    swipeEndTime = Date.now();
+    isSwiping = false;
+  }
+}
+  // 5. 次の期間へ移動関数の修正
+function moveToNextPeriod() {
+  const newDate = new Date(startDate);
+  newDate.setDate(newDate.getDate() + 13); // 13日後に移動
+  startDate = newDate;
+  updateGanttChart();
+  
+  // スライダーを左に設定
+  const slider = document.getElementById('date-slider');
+  if (slider) {
+    slider.value = 0;
+  }
+}
+
+
+  // すべてのデータを取得する関数
+  function fetchAllData() {
+    console.log('データ取得開始');
+    
+    // 一定時間後に強制的にロード完了とする（フォールバック）
+    const fallbackTimer = setTimeout(function() {
+      console.log('データ取得タイムアウト - フォールバック実行');
+      hideLoading();
+      
+      // メッセージ表示してリロードを促す
+      if (!initialDataLoaded) {
+        const container = document.querySelector('.container');
+        if (container) {
+          const message = document.createElement('div');
+          message.innerHTML = `
+            <div class="card-panel red lighten-4" style="margin-top: 20px;">
+              <span class="red-text text-darken-4">
+                データの読み込みに時間がかかっています。
+                <button class="btn-small waves-effect waves-light" onclick="window.location.reload()">
+                  <i class="material-icons left">refresh</i>再読み込み
+                </button>
+              </span>
+            </div>
+          `;
+          container.prepend(message);
+        }
+      }
+    }, 30000);
+    
+    // 機材リストを取得
+    getEquipmentList();
+    
+    // 取得完了したらタイマーをクリア
+    initialDataLoaded = true;
+    clearTimeout(fallbackTimer);
+  }
+  
+  // モバイル向け特別設定（メインの関数）
+function setupMobileEvents() {
+  try {
+    // モバイルデバイス検出
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      // モバイルデバイスの場合は自動的にモバイルビューを有効化
+      document.body.classList.add('mobile-view');
+      
+      // メタビューポートの設定
+      const viewportMeta = document.querySelector('meta[name="viewport"]');
+      if (!viewportMeta) {
+        const meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        document.head.appendChild(meta);
+      } else {
+        // 既存のビューポートメタタグを更新
+        viewportMeta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+      }
+      
+      // タッチデバイス用のスタイルを追加
+      const style = document.createElement('style');
+      style.textContent = `
+        /* モバイル用のスタイル追加 */
+        .gantt-container {
+          overflow: hidden !important;
+        }
+        
+        .gantt-items-column, .gantt-timelines-column {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+        }
+        
+        /* 画面全体の固定 */
+        body.mobile-view {
+          position: fixed;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+        
+        /* 罫線修正 */
+        .gantt-day {
+          border: 1px solid #e0e0e0;
+          border-left: none;
+          box-sizing: border-box;
+        }
+        
+        .gantt-item {
+          border: 1px solid #e0e0e0;
+          border-top: none;
+          box-sizing: border-box;
+        }
+        
+        /* ヘッダー固定 */
+        .gantt-header-wrapper {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          background-color: #f5f5f5;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // body要素に対するタッチイベントの無効化（これにより画面全体の動きを防止）
+      document.body.addEventListener('touchmove', function(e) {
+        // スクロール可能な要素内のタッチ移動は許可する
+        const target = e.target;
+        let isScrollable = false;
+        
+        // スクロール可能な要素かチェック
+        let element = target;
+        while (element && element !== document.body) {
+          if (element.classList.contains('gantt-items-column') || 
+              element.classList.contains('gantt-timelines-column') ||
+              element.classList.contains('gantt-dates')) {
+            isScrollable = true;
+            break;
+          }
+          element = element.parentElement;
+        }
+        
+        if (!isScrollable) {
+          e.preventDefault(); // スクロール可能でない要素内ではタッチ移動を無効化
+        }
+      }, { passive: false });
+      
+      console.log('モバイル向け設定完了');
+    }
+  } catch (error) {
+    console.error('モバイル設定エラー:', error);
+  }
+}
+  
+  // モバイルでのスクロール同期機能を設定
+function setupMobileScroll() {
+  if (!document.body.classList.contains('mobile-view')) return;
+  
+  const headerDates = document.querySelector('.gantt-dates');
+  const timelinesColumn = document.querySelector('.gantt-timelines-column');
+  const itemsColumn = document.querySelector('.gantt-items-column');
+  
+  if (!headerDates || !timelinesColumn || !itemsColumn) return;
+  
+  // 1. 横スクロール同期（日付ヘッダーとタイムライン）
+  headerDates.addEventListener('scroll', function() {
+    timelinesColumn.scrollLeft = headerDates.scrollLeft;
+  });
+  
+  timelinesColumn.addEventListener('scroll', function() {
+    headerDates.scrollLeft = timelinesColumn.scrollLeft;
+  });
+  
+  // 2. 縦スクロール同期（機材リストとタイムライン）
+  itemsColumn.addEventListener('scroll', function() {
+    timelinesColumn.scrollTop = itemsColumn.scrollTop;
+  });
+  
+  timelinesColumn.addEventListener('scroll', function() {
+    itemsColumn.scrollTop = timelinesColumn.scrollTop;
+  });
+  
+  // 3. コンテナ全体の固定 - これによりヘッダーと内容が動かないようにする
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (ganttContainer) {
+    ganttContainer.style.overflow = 'hidden'; // コンテナ自体はスクロールさせない
+  }
+  
+  // 4. 慣性スクロールの有効化 - WebKit/Chrome/Safariベースの対応
+  timelinesColumn.style.webkitOverflowScrolling = 'touch';
+  itemsColumn.style.webkitOverflowScrolling = 'touch';
+  headerDates.style.webkitOverflowScrolling = 'touch';
+  
+  // 5. CSS Scroll Behaviorの設定 - スムーズスクロール
+  timelinesColumn.style.scrollBehavior = 'smooth';
+  itemsColumn.style.scrollBehavior = 'smooth';
+  headerDates.style.scrollBehavior = 'smooth';
+}
+
+  
+  // PC版のボタン修正
+	function setupManagementButtons() {
+	  // 現場マスター管理ボタン
+	  const projectsBtn = document.getElementById('manage-projects-btn');
+	  if (projectsBtn) {
+	    // イベントリスナーをクリア
+	    const projectsClone = projectsBtn.cloneNode(true);
+	    projectsBtn.parentNode.replaceChild(projectsClone, projectsBtn);
+	    
+	    // 新しいイベントリスナーを追加
+	    projectsClone.addEventListener('click', function(e) {
+	      e.preventDefault();
+	      e.stopPropagation();
+	      console.log('Projects button clicked');
+	      
+	      // 現場マスター管理モーダルを表示
+	      openProjectsModal();
+	    });
+	  }
+	  
+	  // 機器マスター管理ボタン
+	  const equipmentBtn = document.getElementById('manage-equipment-btn');
+	  if (equipmentBtn) {
+	    // イベントリスナーをクリア
+	    const equipmentClone = equipmentBtn.cloneNode(true);
+	    equipmentBtn.parentNode.replaceChild(equipmentClone, equipmentBtn);
+	    
+	    // 新しいイベントリスナーを追加
+	    equipmentClone.addEventListener('click', function(e) {
+	      e.preventDefault();
+	      e.stopPropagation();
+	      console.log('Equipment button clicked');
+	      
+	      // 機器マスター管理モーダルを表示
+	      openEquipmentModal();
+	    });
+	  }
+	}
+
+  // 文字サイズスライダーの位置修正
+	function setupPCFontSizeSlider() {
+    const fontSizeControl = document.createElement('div');
+    fontSizeControl.className = 'font-size-control-pc';
+    fontSizeControl.style.display = 'inline-block';
+    fontSizeControl.style.marginLeft = '10px';
+    fontSizeControl.innerHTML = `
+      <label>文字サイズ:</label>
+      <input type="range" id="pc-font-size-slider" min="8" max="16" value="12" style="width: 100px;">
+    `;
+    
+    // 配置する場所を変更 - 「モバイル表示」ボタンの右側に配置
+    const mobileViewBtn = document.getElementById('toggle-mobile-view');
+    if (mobileViewBtn) {
+      mobileViewBtn.parentNode.insertBefore(fontSizeControl, mobileViewBtn.nextSibling);
+    } else {
+      // 配置できない場合は以前の場所に戻す
+      const actionButtons = document.querySelector('.action-buttons');
+      if (actionButtons) {
+        actionButtons.appendChild(fontSizeControl);
+      }
+    }
+    
+    // スライダーイベント
+    const pcFontSlider = document.getElementById('pc-font-size-slider');
+    if (pcFontSlider) {
+      // 保存された値を設定
+      const savedFontSize = localStorage.getItem('pcFontSize') || '12';
+      pcFontSlider.value = savedFontSize;
+      updatePCFontSize(savedFontSize);
+      
+      pcFontSlider.addEventListener('input', function(e) {
+        const fontSize = e.target.value;
+        updatePCFontSize(fontSize);
+        localStorage.setItem('pcFontSize', fontSize);
+      });
+    }
+  }
+
+  // PC版フォントサイズ更新
+  function updatePCFontSize(fontSize) {
+	  document.documentElement.style.setProperty('--pc-font-size', fontSize + 'px');
+	  
+	  // PCモードの場合のみフォントサイズ適用
+	  if (!document.body.classList.contains('mobile-view')) {
+	    document.body.style.fontSize = fontSize + 'px';
+	    
+	    // 重要なクラスに明示的にフォントサイズを設定
+	    document.querySelectorAll('.gantt-item, .gantt-date, .equipment-name, .equipment-detail').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	    
+	    // モーダル内の要素にもフォントサイズを設定
+	    document.querySelectorAll('.modal .modal-content, .modal-footer, .modal label, .modal input, .modal select').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	    
+	    // 確認チェックボックスのテキストサイズ修正
+	    document.querySelectorAll('.settings-panel span').forEach(el => {
+	      el.style.fontSize = fontSize + 'px';
+	    });
+	  }
+	}
+
+  // カレンダーナビゲーションボタンの修正
+	function setupCalendarNavigation() {
+	  const navigationDiv = document.createElement('div');
+	  navigationDiv.className = 'calendar-navigation';
+	  navigationDiv.innerHTML = `
+	    <button class="btn waves-effect waves-light" id="prev-period-btn">
+	      <i class="material-icons">arrow_back</i> 前
+	    </button>
+	    <button class="btn waves-effect waves-light" id="today-btn">
+	      <i class="material-icons">today</i> 本日
+	    </button>
+	    <button class="btn waves-effect waves-light" id="next-period-btn">
+	      <i class="material-icons">arrow_forward</i> 次
+	    </button>
+	  `;
+	  
+	  // 表示エリアの上部に追加
+	  const ganttContainer = document.querySelector('.gantt-container');
+	  if (ganttContainer) {
+	    ganttContainer.parentNode.insertBefore(navigationDiv, ganttContainer);
+	    
+	    // イベントリスナーを追加
+	    document.getElementById('prev-period-btn')?.addEventListener('click', function() {
+	      // 13日前に移動
+	      const newDate = new Date(startDate);
+	      newDate.setDate(newDate.getDate() - 13);
+	      startDate = newDate;
+	      updateGanttChart();
+	    });
+	    
+	    document.getElementById('today-btn')?.addEventListener('click', function() {
+	      startDate = new Date();
+	      startDate.setHours(0, 0, 0, 0);
+	      updateGanttChart();
+	    });
+	    
+	    document.getElementById('next-period-btn')?.addEventListener('click', function() {
+	      // 13日後に移動
+	      const newDate = new Date(startDate);
+	      newDate.setDate(newDate.getDate() + 13);
+	      startDate = newDate;
+	      updateGanttChart();
+	    });
+	  }
+	}
+	
+	// すべてのモーダルを閉じる関数
+	function closeAllModals() {
+	  const modals = document.querySelectorAll('.modal');
+	  modals.forEach(modal => {
+	    try {
+	      const instance = M.Modal.getInstance(modal);
+	      if (instance) instance.close();
+	    } catch (error) {
+	      console.error('モーダルクローズエラー:', error);
+	    }
+	  });
+	}
+	
+	// 日付選択用のカレンダーを設定する関数
+	function setupDatePickers() {
+	  // すべての日付入力フィールドにデートピッカーを適用
+	  const dateInputs = document.querySelectorAll('input[type="date"], input.datepicker');
+	  dateInputs.forEach(input => {
+	    // HTML5のtype="date"を解除して標準のテキスト入力にする
+	    input.type = 'text';
+	    input.classList.add('datepicker');
+	    
+	    // Materializeのデートピッカーを初期化
+	    const options = {
+	      format: 'yyyy-mm-dd',
+	      autoClose: true,
+	      setDefaultDate: input.value ? true : false,
+	      defaultDate: input.value ? new Date(input.value) : null,
+	      onSelect: function(date) {
+	        // 選択した日付を設定
+	        input.value = formatDate(date);
+	        
+	        // changeイベントを発火させる
+	        const event = new Event('change', { bubbles: true });
+	        input.dispatchEvent(event);
+	      }
+	    };
+	    
+	    M.Datepicker.init(input, options);
+	  });
+	  
+	  // カスタム日付ピッカー
+	  const customDatePicker = document.getElementById('custom-date-picker');
+	  if (customDatePicker) {
+	    customDatePicker.type = 'text';
+	    customDatePicker.classList.add('datepicker');
+	    
+	    const datepickerInstance = M.Datepicker.init(customDatePicker, {
+	      format: 'yyyy-mm-dd',
+	      autoClose: true,
+	      onSelect: function(date) {
+	        startDate = date;
+	        updateGanttChart();
+	      }
+	    });
+	    
+	    // カレンダーアイコンクリックでカレンダーを表示
+	    const calendarTrigger = document.getElementById('calendar-trigger');
+	    if (calendarTrigger) {
+	      calendarTrigger.addEventListener('click', function() {
+	        if (datepickerInstance) {
+	          datepickerInstance.open();
+	        }
+	      });
+	    }
+	  }
+	}
+	
+	// 数量変更ボタンのイベントリスナー設定
+	function setupQuantityControls() {
+  try {
+    // マイナスボタン
+    const minusBtn = document.querySelector('.quantity-btn.minus');
+    if (minusBtn) {
+      // 既存のイベントリスナーをクリア
+      const newMinusBtn = minusBtn.cloneNode(true);
+      minusBtn.parentNode.replaceChild(newMinusBtn, minusBtn);
+      
+      // 新しいイベントリスナーを追加
+      newMinusBtn.addEventListener('click', function() {
+        const input = document.getElementById('rental-quantity');
+        if (!input) return;
+        
+        let value = parseInt(input.value) || 1;
+        if (value > 1) {
+          value = value - 1; // 明示的に減算
+          input.value = value;
+        }
+      });
+    }
+    
+    // プラスボタン
+    const plusBtn = document.querySelector('.quantity-btn.plus');
+    if (plusBtn) {
+      // 既存のイベントリスナーをクリア
+      const newPlusBtn = plusBtn.cloneNode(true);
+      plusBtn.parentNode.replaceChild(newPlusBtn, plusBtn);
+      
+      // 新しいイベントリスナーを追加
+      newPlusBtn.addEventListener('click', function() {
+        const input = document.getElementById('rental-quantity');
+        if (!input) return;
+        
+        let value = parseInt(input.value) || 1;
+        value = value + 1; // 明示的に加算
+        input.value = value;
+      });
+    }
+    
+    console.log('数量コントロール設定完了');
+  } catch (error) {
+    console.error('数量コントロール設定エラー:', error);
+  }
+}
+	// 3. 日付スライダーを設定する関数（新規追加）
+  function setupDateSlider() {
+  // 既存のスライダーがあれば削除
+  const existingSlider = document.getElementById('date-slider-container');
+  if (existingSlider) {
+    existingSlider.remove();
+  }
+  
+  // スライダーコンテナを作成
+  const sliderContainer = document.createElement('div');
+  sliderContainer.id = 'date-slider-container';
+  sliderContainer.className = 'date-slider-container';
+  
+  // スライダー要素を作成
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.id = 'date-slider';
+  slider.min = 0;
+  slider.max = 100;
+  slider.value = 0;
+  
+  // ラベル要素を作成
+  const labelLeft = document.createElement('span');
+  labelLeft.className = 'date-slider-label';
+  labelLeft.id = 'date-slider-label-left';
+  labelLeft.textContent = '◀ 前へ';
+  
+  const labelRight = document.createElement('span');
+  labelRight.className = 'date-slider-label';
+  labelRight.id = 'date-slider-label-right';
+  labelRight.textContent = '次へ ▶';
+  
+  // 本日ボタンを追加（新規）
+  const todayBtn = document.createElement('button');
+  todayBtn.id = 'date-slider-today';
+  todayBtn.className = 'btn waves-effect waves-light date-slider-today';
+  todayBtn.innerHTML = '<i class="material-icons">today</i> 本日';
+  
+  // スライダーコンテナに要素を追加
+  sliderContainer.appendChild(labelLeft);
+  sliderContainer.appendChild(slider);
+  sliderContainer.appendChild(labelRight);
+  sliderContainer.appendChild(todayBtn); // 本日ボタンを追加
+  
+  // ガントチャート直前に挿入
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (ganttContainer && ganttContainer.parentNode) {
+    ganttContainer.parentNode.insertBefore(sliderContainer, ganttContainer);
+  }
+  
+  // スライダーイベントリスナー
+  slider.addEventListener('input', function(e) {
+    // スライダー位置に基づいて日付ヘッダーをスクロール
+    const dateHeaders = document.querySelector('#date-headers');
+    if (dateHeaders) {
+      const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
+      const scrollPos = (scrollWidth * e.target.value) / 100;
+      dateHeaders.scrollLeft = scrollPos;
+      
+      // 同期してタイムラインもスクロール
+      syncTimelineScroll(scrollPos);
+    }
+  });
+  
+  // 左右のラベルクリックでスクロール
+  labelLeft.addEventListener('click', function() {
+    moveToPreviousPeriod();
+  });
+  
+  labelRight.addEventListener('click', function() {
+    moveToNextPeriod();
+  });
+  
+  // 本日ボタンクリックイベント（新規）
+  todayBtn.addEventListener('click', function() {
+    goToToday();
+  });
+  
+  // 横スクロール時にスライダーを同期
+  const dateHeaders = document.querySelector('#date-headers');
+  if (dateHeaders) {
+    dateHeaders.addEventListener('scroll', function() {
+      const scrollWidth = dateHeaders.scrollWidth - dateHeaders.clientWidth;
+      if (scrollWidth > 0) {
+        const scrollPos = dateHeaders.scrollLeft;
+        slider.value = (scrollPos / scrollWidth) * 100;
+        
+        // 同期してタイムラインもスクロール
+        syncTimelineScroll(scrollPos);
+      }
+    });
+  }
+}
+	// 2. タイムラインのスクロールを同期する関数（新規）
+function syncTimelineScroll(scrollPos) {
+  const timelines = document.querySelectorAll('.gantt-timeline');
+  timelines.forEach(timeline => {
+    timeline.scrollLeft = scrollPos;
+  });
+}
+
+// 3. 本日へ移動する関数（新規）
+function goToToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  startDate = today;
+  updateGanttChart();
+  
+  // スライダーを左に設定
+  const slider = document.getElementById('date-slider');
+  if (slider) {
+    slider.value = 0;
+  }
+}
 </script>
