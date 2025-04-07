@@ -120,8 +120,7 @@
   }
 
   /* ドロップダウンリストの高さ調整 */
-  #equipment-select, 
-  #mobile-equipment-select {
+  #equipment-select {
     height: 20px !important; /* 20pxに固定 */
     line-height: 20px !important;
     padding: 0 5px !important;
@@ -666,421 +665,6 @@
     margin: 0 !important;
   }
   
-  /* モバイル対応スタイル */
-  @media (max-width: 768px) {
-    .gantt-item {
-      flex: 0 0 250px;
-    }
-    .gantt-date, .gantt-day {
-      flex: 0 0 80px;
-    }
-    .management-buttons button {
-      width: 100%;
-      margin-bottom: 10px;
-    }
-  }
-  
-  /* モバイルビュー */
-  body.mobile-view {
-    padding-top: 180px;
-  }
-  
-  body.mobile-view .container {
-    width: 100%;
-    padding: 0;
-    margin: 0;
-  }
-  
-  body.mobile-view .header {
-    display: none;
-  }
-  
-  body.mobile-view .management-buttons-wrapper {
-    display: none;
-  }
-  
-  body.mobile-view .management-buttons,
-  body.mobile-view .equipment-selector,
-  body.mobile-view .view-controls,
-  body.mobile-view .action-buttons {
-    display: none;
-  }
-  
-  body.mobile-view .gantt-container {
-    margin-top: 5px;
-    border: none;
-    height: calc(100vh - 185px);
-    max-height: none;
-    overflow: hidden;
-  }
-  
-  /* モバイルメニュー */
-  .mobile-menu {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 1000;
-    background-color: #26a69a;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  }
-  
-  body.mobile-view .mobile-menu {
-    display: block;
-  }
-  
-  .mobile-menu-row {
-    display: flex;
-    align-items: center;
-    padding: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.2);
-  }
-  
-  .mobile-menu-title {
-    color: white;
-    font-weight: bold;
-    flex: 1;
-    font-size: 1.1em;
-  }
-  
-  .mobile-menu-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    padding: 5px;
-    position: relative;
-  }
-  
-  /* モバイルメニューボタンのサイズ調整 */
-  .mobile-menu-btn {
-    color: white;
-    background: none;
-    border: none;
-    padding: 12px !important;
-    cursor: pointer;
-    font-size: 1.1em;
-    min-width: 60px !important;
-    min-height: 60px !important;
-  }
-  
-  .mobile-menu-btn i.material-icons {
-    font-size: 36px !important; /* アイコンを2倍に */
-  }
-  
-  /* モバイルビュー用のスタイル修正 */
-.mobile-view .gantt-container {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* コンテナ全体のオーバーフローは非表示 */
-  height: auto !important; /* 高さを自動調整 */
-  max-height: 70vh; /* 画面の70%を最大高さとして設定 */
-}
-  
-  body.mobile-view .gantt-row {
-    min-height: 60px;
-    width: fit-content;
-  }
-  
-  /* モバイル用の機材リスト幅調整 - 画面の1/3に */
-  body.mobile-view .gantt-item {
-    flex: 0 0 33.33vw; /* 画面幅の1/3 */
-    min-width: 150px;
-    font-size: 0.9em;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-  
-  body.mobile-view .gantt-date,
-  body.mobile-view .gantt-day {
-    flex: 0 0 80px;
-    font-size: 0.9em;
-  }
-  
-  body.mobile-view .gantt-header {
-    position: sticky;
-    top: 0;
-    z-index: 25;
-    height: 40px;
-    min-height: unset;
-    background-color: #f5f5f5;
-    width: fit-content;
-  }
-  
-  body.mobile-view .gantt-header .gantt-date {
-    font-weight: bold;
-    padding: 10px 5px;
-  }
-  
-  body.mobile-view .gantt-rows-wrapper {
-    overflow-y: auto;
-    overflow-x: hidden;
-    height: calc(100vh - 225px);
-  }
-  
-  body.mobile-view .gantt-timeline-wrapper {
-    overflow-x: auto;
-    overflow-y: hidden;
-    width: calc(100% - 130px); /* 機器リスト幅を考慮 */
-    margin-left: 130px; /* 機器リスト幅と合わせる */
-  }
-  
-  /* モバイル向け文字サイズ調整 */
-  body.mobile-view .font-size-control-wrapper {
-    position: fixed;
-    right: 10px;
-    top: 70px;
-    background-color: rgba(38, 166, 154, 0.9);
-    padding: 5px 10px;
-    border-radius: 5px;
-    z-index: 1001;
-  }
-  
-  body.mobile-view .font-size-control-wrapper label {
-    color: white;
-  }
-  
-  /* PCに戻すボタン */
-  .return-to-desktop {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 1000;
-    background-color: #26a69a;
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 56px;
-    height: 56px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 1.2em;
-  }
-  
-  body:not(.mobile-view) .return-to-desktop {
-    display: none;
-  }
-  
-  /* 長押し選択中の視覚的フィードバック */
-  .touch-selection {
-    background-color: rgba(38, 166, 154, 0.3) !important;
-  }
-  
-  /* モバイル表示でのモーダル調整 */
-  body.mobile-view .modal {
-    width: 95%;
-    height: auto;
-    max-height: 90vh;
-  }
-  
-  /* モバイル用モーダル調整 - 重なり解消 */
-  body.mobile-view .modal .modal-content {
-    padding: 30px 16px 40px 16px !important;
-    font-size: 1em;
-  }
-  
-  body.mobile-view .modal .modal-footer {
-    padding: 12px;
-    padding-bottom: 60px !important; /* 下部に大きな余白を持たせる */
-    position: relative;
-    z-index: 10;
-  }
-  
-  /* モバイル用ラベル重なり問題解消 */
-  body.mobile-view .modal .input-field {
-    margin-top: 40px !important;
-    margin-bottom: 40px !important;
-  }
-  
-  body.mobile-view .modal label.active {
-    transform: translateY(-28px) scale(0.8) !important;
-  }
-  
-  body.mobile-view .modal-footer .btn, 
-  body.mobile-view .modal-footer .btn-flat {
-    font-size: 1em;
-    height: 44px;
-    line-height: 44px;
-  }
-  
-  body.mobile-view .modal input, 
-  body.mobile-view .modal select {
-    height: 44px;
-    font-size: 1.2rem !important;
-    margin-top: 10px !important;
-  }
-  
-  body.mobile-view .modal .input-field label {
-    font-size: 1.2rem !important;
-  }
-  
-  body.mobile-view .modal .helper-text {
-    margin-top: 8px !important;
-    font-size: 0.9rem !important;
-  }
-  
-  /* モバイルでの貸出バー高さを3倍に */
-  body.mobile-view .rental-bar {
-    height: 90px !important; /* 3倍の高さ */
-    padding: 10px 50px 10px 50px !important; /* パディングを調整 */
-    font-size: 16px !important; /* フォントサイズを大きく */
-  }
-  
-  /* モバイルでの返却ボタン */
-  body.mobile-view .return-button {
-    width: 40px !important;
-    height: 40px !important;
-    left: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-  }
-  
-  body.mobile-view .return-button i.material-icons {
-    font-size: 24px !important;
-  }
-  
-  /* 機材リストの詳細文字サイズをモバイルで統一 */
-  body.mobile-view .equipment-detail,
-  body.mobile-view .equipment-location,
-  body.mobile-view .equipment-stock {
-    font-size: 14px !important; /* 機材名称と同じサイズに */
-    line-height: 1.5;
-  }
-  
-  /* モバイルでのタッチターゲットサイズ増加 */
-  body.mobile-view .btn,
-  body.mobile-view .modal-close,
-  body.mobile-view select,
-  body.mobile-view input[type="checkbox"] + span {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  
-  /* ヘッダーラッパー */
-.mobile-view .gantt-header-wrapper {
-  display: flex;
-  position: sticky;
-  top: 0;
-  background-color: white;
-  z-index: 20;
-  width: 100%;
-}
-  /* コンテンツラッパー */
-.mobile-view .gantt-content-wrapper {
-  display: flex;
-  overflow: hidden; /* 横スクロールはさせない */
-  width: 100%;
-  height: 100%;
-}
-/* 機材リスト列の固定 */
-.mobile-view .gantt-items-column {
-  position: sticky;
-  left: 0;
-  width: 30%; /* 機材リスト列の幅を固定 */
-  min-width: 130px; /* 最小幅を確保 */
-  overflow-y: auto; /* 縦スクロール可能 */
-  z-index: 10;
-  background-color: white; /* 背景を白にして下のコンテンツを隠す */
-  max-height: 100%;
-  border-right: 1px solid #ddd;
-}
-/* タイムライン列 */
-.mobile-view .gantt-timelines-column {
-  flex: 1;
-  overflow-x: auto; /* 横スクロール可能 */
-  overflow-y: auto; /* 縦スクロール可能 */
-  height: 100%;
-}
-
-/* 機材名ヘッダー固定 */
-.mobile-view .gantt-header .gantt-item {
-  position: sticky;
-  left: 0;
-  z-index: 20;
-  background-color: #f5f5f5;
-  width: 30%; /* 機材列の幅と同じ */
-  min-width: 130px; /* 機材列の最小幅と同じ */
-  border-right: 1px solid #ddd;
-}
-/* 日付ヘッダーのスクロール */
-.mobile-view .gantt-dates {
-  display: flex;
-  flex: 1;
-  overflow-x: auto;
-  background-color: #f5f5f5;
-}
-/* スクロール同期のための設定 */
-.mobile-view .gantt-dates::-webkit-scrollbar,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
-}
-
-.mobile-view .gantt-dates::-webkit-scrollbar-track,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.mobile-view .gantt-dates::-webkit-scrollbar-thumb,
-.mobile-view .gantt-timelines-column::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-/* 日付ヘッダーと機材名ヘッダーの高さを同じにする */
-.mobile-view .gantt-header {
-  height: 40px;
-  line-height: 40px;
-  display: flex;
-  align-items: center;
-  font-weight: bold;
-  background-color: #f5f5f5;
-}
-
-/* 日付のセル */
-.mobile-view .gantt-date {
-  min-width: 80px; /* 日付の最小幅 */
-  text-align: center;
-  padding: 0 5px;
-  box-sizing: border-box;
-  border-right: 1px solid #ddd;
-}
-
-/* 機材アイテム */
-.mobile-view .gantt-item {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-  background-color: white;
-}
-
-/* タイムラインのスクロール同期 */
-.mobile-view .gantt-timeline {
-  min-height: 60px; /* タイムラインの最小高さ */
-  border-bottom: 1px solid #ddd;
-}
-  body.mobile-view .gantt-content-wrapper {
-    display: flex;
-    overflow: hidden;
-  }
-  
-  body.mobile-view .gantt-items-column {
-    flex: 0 0 33.33vw; /* 画面幅の1/3 */
-    min-width: 150px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    background: white;
-    z-index: 20;
-  }
-  
-  body.mobile-view .gantt-timelines-column {
-    flex: 1;
-    overflow-x: auto;
-    overflow-y: auto;
-  }
-
   /* 6. 日付スライダーコンテナのスタイル（新規追加） */
 	.date-slider-container {
     display: flex;
@@ -1148,32 +732,6 @@
     max-height: calc(100% - 40px); /* ヘッダー高さを除いた最大高さ */
   }
 
-	/* 11. モバイル対応の調整 */
-	@media (max-width: 768px) {
-	  .gantt-container {
-	    height: 70vh; /* モバイルではより大きく */
-	  }
-	  
-	  .date-slider-container {
-	    padding: 10px;
-	  }
-	  
-	  #date-slider {
-	    height: 12px;
-	  }
-	  
-	  #date-slider::-webkit-slider-thumb,
-	  #date-slider::-moz-range-thumb {
-	    width: 24px;
-	    height: 24px;
-	  }
-	  
-	  .date-slider-label {
-	    padding: 8px 15px;
-	    font-size: 16px;
-	  }
-	}
-
 	/* 12. スクロールバーのデザイン改善 */
 	.gantt-dates::-webkit-scrollbar,
 	.gantt-timeline::-webkit-scrollbar,
@@ -1202,10 +760,6 @@
 	  background: #1a8c81;
 	}
 
-	/* 13. カレンダーナビゲーションの位置調整 */
-	.calendar-navigation {
-	  display: none; /* スライダーに置き換えるため非表示に */
-	}
   /* 10. 本日ボタンのスタイル（新規追加） */
   .date-slider-today {
     margin-left: 10px;
@@ -1230,6 +784,7 @@
   .date-slider-today:hover {
     background-color: #2bbbad;
   }
+  
   /* 12. 日付ヘッダーのスクロールバーのみカスタマイズ */
   #date-headers::-webkit-scrollbar {
     height: 8px;
@@ -1249,44 +804,12 @@
   #date-headers::-webkit-scrollbar-thumb:hover {
     background: #1a8c81;
   }
+  
   /* 13. 各機器の行のスクロールバーを非表示（ヘッダーと同期するため） */
   .gantt-timeline::-webkit-scrollbar {
     display: none;
   }
 
-  /* 14. カレンダーナビゲーションの位置調整 */
-  .calendar-navigation {
-    display: none; /* スライダーに置き換えるため非表示に */
-  }
-
-  /* 15. モバイル対応の調整 */
-  @media (max-width: 768px) {
-    .gantt-container {
-      height: 70vh; /* モバイルではより大きく */
-    }
-    
-    .date-slider-container {
-      padding: 10px;
-      flex-wrap: wrap;
-    }
-    
-    #date-slider {
-      height: 12px;
-      width: 100%;
-      margin: 10px 0;
-      order: 3;
-    }
-    
-    .date-slider-label {
-      padding: 8px 15px;
-      font-size: 16px;
-    }
-    
-    .date-slider-today {
-      height: 36px;
-      margin-left: auto;
-    }
-  }
   /* PC版文字サイズスライダーの位置を修正 */
   .font-size-control-pc {
     display: inline-flex;
@@ -1311,6 +834,7 @@
     margin-right: 5px;
     white-space: nowrap;
   }
+  
   /* 機器マスター管理モーダルの入力フィールド間隔調整 */
   #equipment-modal .input-field {
     margin-top: 5px !important;  /* 上部マージンを縮小 */
@@ -1351,6 +875,7 @@
   #equipment-modal #add-equipment-btn {
     margin-top: 5px !important;
   }
+  
   /* 備考1と備考2のフィールドを揃えるスタイル */
   #equipment-modal .input-field.col.s6 {
     clear: none !important; /* 浮動要素のクリアを防止 */
@@ -1376,5 +901,4 @@
     display: table;
     clear: both;
   }
-
 </style>

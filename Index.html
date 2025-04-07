@@ -10,32 +10,6 @@
     <?!= include('Stylesheet'); ?>
   </head>
   <body>
-    <!-- モバイルメニュー -->
-    <div class="mobile-menu">
-      <div class="mobile-menu-row">
-        <div class="mobile-menu-title">機材貸出管理</div>
-        <div class="mobile-menu-buttons">
-          <button class="mobile-menu-btn" id="mobile-menu-undo" title="元に戻す">
-            <i class="material-icons">undo</i>
-          </button>
-          <button class="mobile-menu-btn" id="mobile-manage-projects" title="現場管理">
-            <i class="material-icons">business</i>
-          </button>
-          <button class="mobile-menu-btn" id="mobile-manage-equipment" title="機材管理">
-            <i class="material-icons">build</i>
-          </button>
-          <button class="mobile-menu-btn" id="toggle-pc-view" title="PC表示">
-            <i class="material-icons">desktop_windows</i>
-          </button>
-          <!-- 文字サイズスライダーをここに追加 -->
-          <div class="font-size-control-wrapper">
-            <label>文字サイズ:</label>
-            <input type="range" id="font-size-slider" min="10" max="20" value="12">
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div id="loading" class="hidden">
       <div class="preloader-wrapper big active">
         <div class="spinner-layer spinner-blue-only">
@@ -64,9 +38,6 @@
           </button>
           <button class="btn waves-effect waves-light" id="manage-equipment-btn">
             <i class="material-icons left">build</i>機器マスター管理
-          </button>
-          <button class="btn waves-effect waves-light" id="toggle-mobile-view">
-            <i class="material-icons left">smartphone</i>モバイル表示
           </button>
         </div>
         
@@ -347,11 +318,6 @@
         <button class="modal-close waves-effect waves-green btn-flat">閉じる</button>
       </div>
     </div>
-
-    <!-- PCに戻すボタン -->
-    <button class="return-to-desktop" id="return-to-desktop">
-      <i class="material-icons">desktop_windows</i>
-    </button>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
     <?!= include('JavaScript'); ?>
