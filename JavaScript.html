@@ -5216,72 +5216,68 @@ function saveScrollPosition() {
     }
   }
   
-  // カレンダースワイプ設定の修正版
+  // カレンダーのスワイプ機能を設定
 function setupCalendarSwipe() {
-  // 対象の要素を取得
-  const dateHeaders = document.querySelector('.gantt-dates');
+  const headerDates = document.querySelector('.gantt-dates');
   const timelinesColumn = document.querySelector('.gantt-timelines-column');
   
-  if (!dateHeaders || !timelinesColumn) return;
+  if (!headerDates || !timelinesColumn) return;
   
-  let startX, startScrollLeft, isHorizontalSwipe;
+  let startX = 0;
+  let startY = 0;
+  let startScrollLeft = 0;
+  let startScrollTop = 0;
+  let isDragging = false;
+  let touchStartTime = 0;
+  let initialDirection = null; // 'horizontal' または 'vertical'
   
-  // タッチ開始イベント
-  const handleTouchStart = function(e) {
-    // フラグを初期化
-    isHorizontalSwipe = null;
+  // モバイル用のタッチイベント
+  headerDates.addEventListener('touchstart', handleTouchStart, { passive: false });
+  timelinesColumn.addEventListener('touchstart', handleTouchStart, { passive: false });
+  
+  function handleTouchStart(e) {
     isSwiping = true;
+    isDragging = true;
+    touchStartTime = Date.now();
     startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    startScrollLeft = this === headerDates ? headerDates.scrollLeft : timelinesColumn.scrollLeft;
+    startScrollTop = this === headerDates ? 0 : timelinesColumn.scrollTop;
+    initialDirection = null; // 初期化
     
-    // スクロール開始位置を記録
-    startScrollLeft = dateHeaders.scrollLeft;
-  };
+    // イベントリスナーを追加
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+  }
   
-  // タッチ移動イベント
-  const handleTouchMove = function(e) {
-    if (!isSwiping) return;
+  function handleTouchMove(e) {
+    if (!isDragging) return;
     
-    // 水平移動距離
-    const deltaX = startX - e.touches[0].clientX;
-    const absX = Math.abs(deltaX);
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = startX - currentX;
+    const deltaY = startY - currentY;
     
-    // 最初の動きで水平/垂直スワイプを判定
-    if (isHorizontalSwipe === null) {
-      const deltaY = Math.abs(e.touches[0].clientY - e.touches[0].clientY);
-      isHorizontalSwipe = absX > deltaY;
+    // 初回のタッチ移動で方向を決定（縦か横か）
+    if (initialDirection === null) {
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        initialDirection = 'horizontal';
+      } else {
+        initialDirection = 'vertical';
+      }
     }
     
-    // 水平スワイプの場合、スクロール位置を更新
-    if (isHorizontalSwipe) {
-      // 標準のスクロール動作を防止
-      e.preventDefault();
+    // 横方向のスワイプの場合
+    if (initialDirection === 'horizontal') {
+      e.preventDefault(); // スクロールの既定の動作を防止
       
-      // スクロール位置を更新（横方向のみ）
+      // 両方のコンテナを同期してスクロール
       const newScrollLeft = startScrollLeft + deltaX;
-      dateHeaders.scrollLeft = newScrollLeft;
+      headerDates.scrollLeft = newScrollLeft;
       timelinesColumn.scrollLeft = newScrollLeft;
     }
-  };
-  
-  // タッチ終了イベント
-  const handleTouchEnd = function() {
-    isSwiping = false;
-    // スワイプ終了時刻を記録（モーダル表示抑制のため）
-    swipeEndTime = Date.now();
-    
-    // スクロール位置を保存
-    saveScrollPosition();
-  };
-  
-  // 日付ヘッダーとタイムラインカラムにイベントリスナーを設定
-  dateHeaders.addEventListener('touchstart', handleTouchStart, { passive: true });
-  dateHeaders.addEventListener('touchmove', handleTouchMove, { passive: false });
-  dateHeaders.addEventListener('touchend', handleTouchEnd);
-  
-  timelinesColumn.addEventListener('touchstart', handleTouchStart, { passive: true });
-  timelinesColumn.addEventListener('touchmove', handleTouchMove, { passive: false });
-  timelinesColumn.addEventListener('touchend', handleTouchEnd);
-}
+    // 縦方向のスワイプの場合はブラウザの既定のスクロールを活用（ここでは何もしない）
+  }
 
   // 4. 前の期間へ移動関数の修正
 function moveToPreviousPeriod() {
@@ -5296,7 +5292,63 @@ function moveToPreviousPeriod() {
     slider.value = 0;
   }
 }
-
+function handleTouchEnd(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    
+    const endTime = Date.now();
+    const timeElapsed = endTime - touchStartTime;
+    const currentX = e.changedTouches[0].clientX;
+    const deltaX = startX - currentX;
+    
+    // 慣性スクロールのシミュレーション（横方向の場合のみ）
+    if (initialDirection === 'horizontal' && Math.abs(deltaX) > 20 && timeElapsed < 300) {
+      // スワイプの勢いを計算
+      const velocity = deltaX / timeElapsed;
+      // 慣性の強さと持続時間を決定
+      const momentum = velocity * 300; // 300はスクロールの持続時間（ミリ秒）
+      
+      // スムーズなスクロールアニメーション
+      const targetScroll = Math.max(0, headerDates.scrollLeft + momentum);
+      
+      // 減速しながらスクロールするアニメーション
+      const startValue = headerDates.scrollLeft;
+      const changeInValue = targetScroll - startValue;
+      const duration = 300;
+      const startTime = Date.now();
+      
+      function animateScroll() {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        
+        if (elapsed >= duration) {
+          headerDates.scrollLeft = targetScroll;
+          timelinesColumn.scrollLeft = targetScroll;
+          return;
+        }
+        
+        // イージング関数で減速効果を付ける
+        const t = elapsed / duration;
+        const easeOut = 1 - Math.pow(1 - t, 3); // cubic ease-out
+        
+        const currentPosition = startValue + changeInValue * easeOut;
+        headerDates.scrollLeft = currentPosition;
+        timelinesColumn.scrollLeft = currentPosition;
+        
+        requestAnimationFrame(animateScroll);
+      }
+      
+      requestAnimationFrame(animateScroll);
+    }
+    
+    document.removeEventListener('touchmove', handleTouchMove);
+    document.removeEventListener('touchend', handleTouchEnd);
+    
+    // スワイプ終了時刻を記録（モーダル表示抑制用）
+    swipeEndTime = Date.now();
+    isSwiping = false;
+  }
+}
   // 5. 次の期間へ移動関数の修正
 function moveToNextPeriod() {
   const newDate = new Date(startDate);
@@ -5349,184 +5401,148 @@ function moveToNextPeriod() {
     clearTimeout(fallbackTimer);
   }
   
-  // モバイル機能関連の修正
-  // イベント設定の改善
-  function setupMobileEvents() {
-    // モバイル向け機器セレクタの変更イベント
-    const mobileEquipmentSelect = document.getElementById('mobile-equipment-select');
-    if (mobileEquipmentSelect) {
-      // 古いイベントリスナーを削除
-      const clone = mobileEquipmentSelect.cloneNode(true);
-      mobileEquipmentSelect.parentNode.replaceChild(clone, mobileEquipmentSelect);
-      
-      // 新しいイベントリスナーを追加
-      clone.addEventListener('change', function(e) {
-        console.log('Mobile equipment select changed:', e.target.value);
-        selectedEquipmentWithLocation = e.target.value;
-        const parts = selectedEquipmentWithLocation.split('|');
-        selectedEquipment = parts[0]; // 機器管理番号部分
-        selectedLocation = parts[1] || ''; // 定置場所部分
-        updateGanttChart();
-        
-        // スクロール処理を確実に実行
-        setTimeout(() => {
-          scrollToSelectedEquipment();
-        }, 500);
-      });
-    }
+  // モバイル向け特別設定（メインの関数）
+function setupMobileEvents() {
+  try {
+    // モバイルデバイス検出
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    // 現場マスター管理ボタン
-    const mobileManageProjects = document.getElementById('mobile-manage-projects');
-    if (mobileManageProjects) {
-      // 古いイベントリスナーを削除
-      const clone = mobileManageProjects.cloneNode(true);
-      mobileManageProjects.parentNode.replaceChild(clone, mobileManageProjects);
+    if (isMobile) {
+      // モバイルデバイスの場合は自動的にモバイルビューを有効化
+      document.body.classList.add('mobile-view');
       
-      // 新しいイベントリスナーを追加
-      clone.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Mobile projects button clicked');
-        
-        const modal = document.getElementById('projects-modal');
-        if (modal) {
-          const modalOptions = {
-            dismissible: true,
-            opacity: 0.5,
-            inDuration: 300,
-            outDuration: 200,
-            preventScrolling: true,
-            startingTop: '10%',
-            endingTop: '10%'
-          };
-          
-          // 既存のモーダルインスタンスを削除
-          try {
-            const oldInstance = M.Modal.getInstance(modal);
-            if (oldInstance) oldInstance.destroy();
-          } catch (error) {
-            console.error('Modal instance destroy error:', error);
-          }
-          
-          // 新しいモーダルインスタンスを作成して開く
-          setTimeout(() => {
-            try {
-              const instance = M.Modal.init(modal, modalOptions);
-              setTimeout(() => {
-                instance.open();
-                updateProjectsTable(); // モーダル内容を更新
-              }, 50);
-            } catch (error) {
-              console.error('Modal open error:', error);
-              alert('モーダルの表示に失敗しました: ' + error);
-            }
-          }, 50);
+      // メタビューポートの設定
+      const viewportMeta = document.querySelector('meta[name="viewport"]');
+      if (!viewportMeta) {
+        const meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        document.head.appendChild(meta);
+      } else {
+        // 既存のビューポートメタタグを更新
+        viewportMeta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+      }
+      
+      // タッチデバイス用のスタイルを追加
+      const style = document.createElement('style');
+      style.textContent = `
+        /* モバイル用のスタイル追加 */
+        .gantt-container {
+          overflow: hidden !important;
         }
-      });
-    }
-    
-    // 機器マスター管理ボタン
-    const mobileManageEquipment = document.getElementById('mobile-manage-equipment');
-    if (mobileManageEquipment) {
-      // 古いイベントリスナーを削除
-      const clone = mobileManageEquipment.cloneNode(true);
-      mobileManageEquipment.parentNode.replaceChild(clone, mobileManageEquipment);
-      
-      // 新しいイベントリスナーを追加
-      clone.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Mobile equipment button clicked');
         
-        const modal = document.getElementById('equipment-modal');
-        if (modal) {
-          const modalOptions = {
-            dismissible: true,
-            opacity: 0.5,
-            inDuration: 300,
-            outDuration: 200,
-            preventScrolling: true,
-            startingTop: '10%',
-            endingTop: '10%'
-          };
-          
-          // 既存のモーダルインスタンスを削除
-          try {
-            const oldInstance = M.Modal.getInstance(modal);
-            if (oldInstance) oldInstance.destroy();
-          } catch (error) {
-            console.error('Modal instance destroy error:', error);
-          }
-          
-          // 新しいモーダルインスタンスを作成して開く
-          setTimeout(() => {
-            try {
-              const instance = M.Modal.init(modal, modalOptions);
-              setTimeout(() => {
-                instance.open();
-                updateEquipmentTable(); // モーダル内容を更新
-                updateLocationSelect(); // 定置場所選択肢を更新
-              }, 50);
-            } catch (error) {
-              console.error('Modal open error:', error);
-              alert('モーダルの表示に失敗しました: ' + error);
-            }
-          }, 50);
+        .gantt-items-column, .gantt-timelines-column {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
         }
-      });
+        
+        /* 画面全体の固定 */
+        body.mobile-view {
+          position: fixed;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+        
+        /* 罫線修正 */
+        .gantt-day {
+          border: 1px solid #e0e0e0;
+          border-left: none;
+          box-sizing: border-box;
+        }
+        
+        .gantt-item {
+          border: 1px solid #e0e0e0;
+          border-top: none;
+          box-sizing: border-box;
+        }
+        
+        /* ヘッダー固定 */
+        .gantt-header-wrapper {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          background-color: #f5f5f5;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // body要素に対するタッチイベントの無効化（これにより画面全体の動きを防止）
+      document.body.addEventListener('touchmove', function(e) {
+        // スクロール可能な要素内のタッチ移動は許可する
+        const target = e.target;
+        let isScrollable = false;
+        
+        // スクロール可能な要素かチェック
+        let element = target;
+        while (element && element !== document.body) {
+          if (element.classList.contains('gantt-items-column') || 
+              element.classList.contains('gantt-timelines-column') ||
+              element.classList.contains('gantt-dates')) {
+            isScrollable = true;
+            break;
+          }
+          element = element.parentElement;
+        }
+        
+        if (!isScrollable) {
+          e.preventDefault(); // スクロール可能でない要素内ではタッチ移動を無効化
+        }
+      }, { passive: false });
+      
+      console.log('モバイル向け設定完了');
     }
-  }
-  
-  // モバイルでのスクロール同期を設定する関数
-function setupMobileScroll() {
-  // モバイルビューモードでのみ適用
-  if (!document.body.classList.contains('mobile-view')) return;
-  
-  // 日付ヘッダー要素と各タイムライン要素を取得
-  const dateHeaders = document.querySelector('.gantt-dates');
-  const timelinesColumn = document.querySelector('.gantt-timelines-column');
-  
-  if (!dateHeaders || !timelinesColumn) return;
-  
-  // 日付ヘッダーのスクロールイベントを監視
-  dateHeaders.addEventListener('scroll', function() {
-    // タイムラインカラムのスクロール位置を同期
-    timelinesColumn.scrollLeft = this.scrollLeft;
-  });
-  
-  // タイムラインカラムのスクロールイベントを監視
-  timelinesColumn.addEventListener('scroll', function() {
-    // 横スクロールのみ同期（縦スクロールは独立）
-    dateHeaders.scrollLeft = this.scrollLeft;
-  });
-  
-  // 初期スクロール位置の同期
-  // 保存されたスクロール位置があれば復元
-  if (savedScrollPosition && savedScrollPosition.left) {
-    dateHeaders.scrollLeft = savedScrollPosition.left;
-    timelinesColumn.scrollLeft = savedScrollPosition.left;
-  }
-  
-  // 機材名一覧の縦スクロールをタイムラインの縦スクロールと同期
-  const itemsColumn = document.querySelector('.gantt-items-column');
-  if (itemsColumn) {
-    // タイムラインの縦スクロールを監視して機材名一覧に反映
-    timelinesColumn.addEventListener('scroll', function() {
-      itemsColumn.scrollTop = this.scrollTop;
-    });
-    
-    // 機材名一覧の縦スクロールを監視してタイムラインに反映
-    itemsColumn.addEventListener('scroll', function() {
-      timelinesColumn.scrollTop = this.scrollTop;
-    });
-    
-    // 保存されたスクロール位置があれば縦スクロールも復元
-    if (savedScrollPosition && savedScrollPosition.top) {
-      itemsColumn.scrollTop = savedScrollPosition.top;
-      timelinesColumn.scrollTop = savedScrollPosition.top;
-    }
+  } catch (error) {
+    console.error('モバイル設定エラー:', error);
   }
 }
+  
+  // モバイルでのスクロール同期機能を設定
+function setupMobileScroll() {
+  if (!document.body.classList.contains('mobile-view')) return;
+  
+  const headerDates = document.querySelector('.gantt-dates');
+  const timelinesColumn = document.querySelector('.gantt-timelines-column');
+  const itemsColumn = document.querySelector('.gantt-items-column');
+  
+  if (!headerDates || !timelinesColumn || !itemsColumn) return;
+  
+  // 1. 横スクロール同期（日付ヘッダーとタイムライン）
+  headerDates.addEventListener('scroll', function() {
+    timelinesColumn.scrollLeft = headerDates.scrollLeft;
+  });
+  
+  timelinesColumn.addEventListener('scroll', function() {
+    headerDates.scrollLeft = timelinesColumn.scrollLeft;
+  });
+  
+  // 2. 縦スクロール同期（機材リストとタイムライン）
+  itemsColumn.addEventListener('scroll', function() {
+    timelinesColumn.scrollTop = itemsColumn.scrollTop;
+  });
+  
+  timelinesColumn.addEventListener('scroll', function() {
+    itemsColumn.scrollTop = timelinesColumn.scrollTop;
+  });
+  
+  // 3. コンテナ全体の固定 - これによりヘッダーと内容が動かないようにする
+  const ganttContainer = document.querySelector('.gantt-container');
+  if (ganttContainer) {
+    ganttContainer.style.overflow = 'hidden'; // コンテナ自体はスクロールさせない
+  }
+  
+  // 4. 慣性スクロールの有効化 - WebKit/Chrome/Safariベースの対応
+  timelinesColumn.style.webkitOverflowScrolling = 'touch';
+  itemsColumn.style.webkitOverflowScrolling = 'touch';
+  headerDates.style.webkitOverflowScrolling = 'touch';
+  
+  // 5. CSS Scroll Behaviorの設定 - スムーズスクロール
+  timelinesColumn.style.scrollBehavior = 'smooth';
+  itemsColumn.style.scrollBehavior = 'smooth';
+  headerDates.style.scrollBehavior = 'smooth';
+}
+
   
   // PC版のボタン修正
 	function setupManagementButtons() {
