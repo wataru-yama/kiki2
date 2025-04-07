@@ -1155,54 +1155,57 @@ function saveReturn(data) {
       throw new Error('該当する貸出データが見つかりません');
     }
     
-    // 返却データを更新
-    rentalSheet.getRange(rowIndex, statusIndex + 1).setValue('返却済み');
-    rentalSheet.getRange(rowIndex, returnDateIndex + 1).setValue(new Date(data.returnDate));
-    
-    // 返却場所を取得 - 貸出元と同じ場所に返却
-    const returnLocation = data.returnLocation || '';
-    
-    // 機器リストの定置場所を更新
-    const equipmentId = rentalData[equipmentIdIndex];
+    // 借用中の台数
+    const borrowedQuantity = parseInt(rentalData[quantityIndex]) || 0;
     
     // 返却台数（リクエストされた台数または貸出台数全部）
     const returnQuantity = Math.min(
-      parseInt(data.returnQuantity) || 0,
-      parseInt(rentalData[quantityIndex]) || 0
+      parseInt(data.returnQuantity) || borrowedQuantity,
+      borrowedQuantity
     );
     
-    // 返却台数が貸出台数より少ない場合は貸出レコードを分割
-    const borrowedQuantity = parseInt(rentalData[quantityIndex]) || 0;
+    if (returnQuantity <= 0) {
+      throw new Error('返却台数が無効です');
+    }
     
-    if (returnQuantity > 0 && returnQuantity < borrowedQuantity) {
+    // 返却台数が貸出台数より少ない場合の処理
+    if (returnQuantity < borrowedQuantity) {
       // 残りの台数を計算
       const remainingQuantity = borrowedQuantity - returnQuantity;
       
-      // 貸出レコードの台数を残り台数に更新
-      rentalSheet.getRange(rowIndex, quantityIndex + 1).setValue(remainingQuantity);
+      // 返却分の処理 - 元の行を返却済みにして返却した台数を設定
+      rentalSheet.getRange(rowIndex, statusIndex + 1).setValue('返却済み');
+      rentalSheet.getRange(rowIndex, returnDateIndex + 1).setValue(new Date(data.returnDate));
+      rentalSheet.getRange(rowIndex, quantityIndex + 1).setValue(returnQuantity);
       
-      // 返却済みレコードを新規作成
-      const returnRow = [...rentalData];
-      returnRow[quantityIndex] = returnQuantity; // 返却する台数
-      returnRow[statusIndex] = '返却済み'; // ステータスを返却済みに
-      returnRow[returnDateIndex] = new Date(data.returnDate); // 返却日を設定
+      // 残りの台数を新規貸出として登録
+      const newRentalData = [...rentalData];
+      newRentalData[statusIndex] = '貸出中';               // ステータスを貸出中に
+      newRentalData[returnDateIndex] = '';                 // 返却日をクリア
+      newRentalData[quantityIndex] = remainingQuantity;    // 数量を残り台数に
+      newRentalData[registrationDateIndex] = new Date();   // 登録日時を現在に
       
-      // 新しい行を追加
-      rentalSheet.appendRow(returnRow);
+      // 新しい貸出データを追加
+      rentalSheet.appendRow(newRentalData);
       
       // 日付フォーマットの適用
       const newRowIndex = rentalSheet.getLastRow();
-      if (newRowIndex > rowIndex) {
-        // 借用開始日、借用終了日、登録日時、返却日のカラムにフォーマット適用
-        rentalSheet.getRange(newRowIndex, 3, 1, 2).setNumberFormat('yyyy/MM/dd'); // 開始日、終了日
-        rentalSheet.getRange(newRowIndex, 8, 1, 1).setNumberFormat('yyyy/MM/dd HH:mm:ss'); // 登録日時
-        rentalSheet.getRange(newRowIndex, 10, 1, 1).setNumberFormat('yyyy/MM/dd'); // 返却日
-      }
+      rentalSheet.getRange(newRowIndex, 3, 1, 2).setNumberFormat('yyyy/MM/dd'); // 借用開始日と借用終了日
+      rentalSheet.getRange(newRowIndex, 8, 1, 1).setNumberFormat('yyyy/MM/dd HH:mm:ss'); // 登録日時
+      rentalSheet.getRange(newRowIndex, 10, 1, 1).setNumberFormat('yyyy/MM/dd'); // 返却日
+      
+      console.log(`部分返却: ${returnQuantity}台返却、${remainingQuantity}台は貸出継続`);
     } else {
       // 全台数返却の場合はそのままステータスを変更
+      rentalSheet.getRange(rowIndex, statusIndex + 1).setValue('返却済み');
+      rentalSheet.getRange(rowIndex, returnDateIndex + 1).setValue(new Date(data.returnDate));
+      console.log(`全数返却: ${borrowedQuantity}台`);
     }
     
     // 台数更新処理
+    const equipmentId = rentalData[equipmentIdIndex];
+    const returnLocation = data.returnLocation || '';
+    
     if (equipmentId && returnQuantity > 0) {
       const updateResult = updateEquipmentLocationWithSource(
         equipmentId, 
