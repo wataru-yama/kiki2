@@ -1,0 +1,240 @@
+<script>
+/**
+ * 機材貸出管理システム
+ * ガントチャートとカレンダー連携スクリプト
+ */
+
+// DOMコンテンツ読み込み完了時の処理
+document.addEventListener('DOMContentLoaded', function() {
+  initializeGanttCalendarIntegration();
+});
+
+/**
+ * ガントチャートとカレンダーの連携初期化
+ */
+function initializeGanttCalendarIntegration() {
+  // Flatpickrカレンダーが初期化された後にイベントリスナーを設定
+  document.addEventListener('flatpickr-ready', function(e) {
+    setupDatePickerEvents();
+  });
+  
+  // カスタムイベントの発行（Flatpickrの初期化完了を通知）
+  setTimeout(function() {
+    document.dispatchEvent(new CustomEvent('flatpickr-ready'));
+  }, 500);
+}
+
+/**
+ * 日付選択コントロールのイベント設定
+ */
+function setupDatePickerEvents() {
+  // 貸出モーダルが表示された時の処理
+  const rentalModal = document.getElementById('rentalModal');
+  if (rentalModal) {
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.attributeName === 'style' && 
+            rentalModal.style.display === 'flex') {
+          // モーダル表示時に実行する処理
+          syncRentalDatepickersWithGantt();
+        }
+      });
+    });
+    
+    observer.observe(rentalModal, { attributes: true });
+  }
+  
+  // 貸出期間の変更時にガントチャートに反映
+  const startDateInput = document.getElementById('startDate');
+  const endDateInput = document.getElementById('endDate');
+  
+  if (startDateInput && endDateInput) {
+    startDateInput.addEventListener('change', function() {
+      updateGanttFromDatepickers();
+    });
+    
+    endDateInput.addEventListener('change', function() {
+      updateGanttFromDatepickers();
+    });
+  }
+}
+
+/**
+ * 貸出モーダルの日付選択をガントチャートと同期
+ */
+function syncRentalDatepickersWithGantt() {
+  const modal = document.getElementById('rentalModal');
+  const rentalId = modal.getAttribute('data-rental-id');
+  
+  // 既存の貸出編集の場合
+  if (rentalId) {
+    const rental = rentalData.find(r => r.id === parseInt(rentalId));
+    
+    if (rental) {
+      // Flatpickrインスタンスを取得
+      const startDatePicker = document.querySelector('#startDate')._flatpickr;
+      const endDatePicker = document.querySelector('#endDate')._flatpickr;
+      
+      if (startDatePicker && endDatePicker) {
+        // 日付を設定
+        startDatePicker.setDate(rental.startDate);
+        endDatePicker.setDate(rental.endDate);
+        
+        // ガントチャートでタスクを選択状態にする
+        if (ganttChart) {
+          const task = ganttChart.tasks.find(t => t.id === rentalId);
+          if (task) {
+            ganttChart.trigger_task_click(task.id);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 日付選択の変更をガントチャートに反映
+ */
+function updateGanttFromDatepickers() {
+  const modal = document.getElementById('rentalModal');
+  const rentalId = modal.getAttribute('data-rental-id');
+  
+  // 編集モードの場合のみ
+  if (rentalId && ganttChart) {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    // 日付が有効な場合のみ反映
+    if (startDate && endDate && new Date(startDate) <= new Date(endDate)) {
+      // ガントチャートのタスクを更新
+      const task = ganttChart.tasks.find(t => t.id === rentalId);
+      
+      if (task) {
+        const oldStart = new Date(task.start);
+        const oldEnd = new Date(task.end);
+        const newStart = new Date(startDate);
+        const newEnd = new Date(endDate);
+        
+        // 日付が変更された場合のみ更新
+        if (oldStart.getTime() !== newStart.getTime() || 
+            oldEnd.getTime() !== newEnd.getTime()) {
+          
+          // タスクの日付を更新
+          task._start = newStart;
+          task._end = newEnd;
+          task.start = newStart;
+          task.end = newEnd;
+          
+          // ガントチャートを再描画
+          ganttChart.refresh(task);
+          
+          // 親タスクの期間も調整
+          if (task.parent) {
+            adjustParentTaskDates(task.parent);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 親タスクの期間を子タスクの期間に合わせて調整
+ * @param {string} parentId - 親タスクのID
+ */
+function adjustParentTaskDates(parentId) {
+  if (!ganttChart) return;
+  
+  // 親タスクを取得
+  const parentTask = ganttChart.tasks.find(t => t.id === parentId);
+  
+  if (parentTask) {
+    // この親タスクに属するすべての子タスクを取得
+    const childTasks = ganttChart.tasks.filter(t => t.parent === parentId);
+    
+    if (childTasks.length > 0) {
+      // 子タスクの開始日と終了日を収集
+      const startDates = childTasks.map(t => new Date(t.start).getTime());
+      const endDates = childTasks.map(t => new Date(t.end).getTime());
+      
+      // 親タスクの期間を子タスクの期間に合わせて調整
+      const newStart = new Date(Math.min(...startDates));
+      const newEnd = new Date(Math.max(...endDates));
+      
+      // 親タスクの日付を更新
+      parentTask._start = newStart;
+      parentTask._end = newEnd;
+      parentTask.start = newStart;
+      parentTask.end = newEnd;
+      
+      // ガントチャートを再描画
+      ganttChart.refresh(parentTask);
+    }
+  }
+}
+
+/**
+ * ガントチャートで期間が変更された際に日付選択に反映
+ * @param {Object} task - 変更されたタスク
+ * @param {Date} startDate - 新しい開始日
+ * @param {Date} endDate - 新しい終了日
+ */
+function syncDatepickersFromGantt(task, startDate, endDate) {
+  // モーダルが表示されている場合のみ反映
+  const modal = document.getElementById('rentalModal');
+  
+  if (modal && modal.style.display === 'flex') {
+    const rentalId = modal.getAttribute('data-rental-id');
+    
+    // 現在編集中のタスクの場合のみ反映
+    if (rentalId && rentalId === task.id) {
+      // Flatpickrインスタンスを取得
+      const startDatePicker = document.querySelector('#startDate')._flatpickr;
+      const endDatePicker = document.querySelector('#endDate')._flatpickr;
+      
+      if (startDatePicker && endDatePicker) {
+        // 日付を設定
+        startDatePicker.setDate(formatDate(startDate));
+        endDatePicker.setDate(formatDate(endDate));
+      }
+    }
+  }
+}
+
+/**
+ * ガントチャートの期間変更イベントハンドラー拡張
+ */
+function extendGanttDateChangeHandler() {
+  if (!ganttChart) return;
+  
+  // 元のハンドラーを保存
+  const originalDateChangeHandler = ganttChart.options.on_date_change;
+  
+  // 拡張ハンドラーに置き換え
+  ganttChart.options.on_date_change = function(task, start, end) {
+    // 元のハンドラーを呼び出し
+    if (typeof originalDateChangeHandler === 'function') {
+      originalDateChangeHandler(task, start, end);
+    }
+    
+    // 日付選択に反映
+    syncDatepickersFromGantt(task, start, end);
+  };
+}
+
+/**
+ * 日付文字列をYYYY-MM-DD形式に変換
+ * @param {Date} date - 日付オブジェクト
+ * @returns {string} フォーマットされた日付文字列
+ */
+function formatDate(date) {
+  if (!date) return '';
+  
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+</script>
