@@ -1,0 +1,796 @@
+<style>
+/* 全体のスタイル */
+:root {
+  --base-font-size: 14px;
+  --primary-color: #00897b;
+  --primary-color-light: #4ebaaa;
+  --primary-color-dark: #005b4f;
+  --accent-color: #ff5722;
+  --background-color: #f5f5f5;
+  --text-color: #333;
+  --text-color-light: #757575;
+  --text-color-inverse: #fff;
+  --border-color: #e0e0e0;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --gantt-bar-color: #ffb74d;
+  --gantt-bar-hover-color: #ffa726;
+  --today-color: #e8f5e9;
+  --weekend-color: #f9f9f9;
+  --drag-highlight-color: rgba(0, 137, 123, 0.2);
+  --header-height-desktop: 180px;
+  --header-height-mobile: 220px;
+  --row-base-height: 50px;
+  --bar-height: 30px;
+  --bar-spacing: 40px;
+  --cell-width-desktop: 80px;
+  --cell-width-mobile: 60px;
+}
+
+body {
+  font-family: 'Noto Sans JP', 'Roboto', sans-serif;
+  font-size: var(--base-font-size);
+  line-height: 1.5;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* スクロールバーのスタイル */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* ヘッダー */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--text-color-inverse);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  padding-bottom: 8px;
+  width: 100%;
+}
+
+.nav-wrapper {
+  padding: 0 16px;
+}
+
+#loginUserInfo {
+  padding: 0 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.button-row {
+  margin: 8px 0;
+  padding: 0 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-row .btn {
+  margin: 4px;
+  white-space: nowrap;
+}
+
+.calendar-nav {
+  margin: 0;
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.calendar-nav .btn-flat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 5px;
+}
+
+.calendar-nav .material-icons {
+  font-size: 1.2rem;
+  margin: 0 4px;
+}
+
+.date-display-row {
+  background-color: var(--primary-color-light);
+  padding: 8px 0;
+  margin: 0;
+  color: var(--text-color-inverse);
+}
+
+.date-range {
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+/* フォントサイズ選択 */
+.font-size-selector {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px;
+}
+
+.font-size-selector .btn-flat {
+  margin: 0 5px;
+  padding: 0 10px;
+  border-radius: 4px;
+}
+
+.font-size-selector .btn-flat:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* メインコンテンツ */
+main {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  height: calc(100vh - var(--header-height-desktop));
+}
+
+/* ガントチャート */
+.gantt-container {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: var(--text-color-inverse);
+  border-radius: 0;
+  box-shadow: 0 1px 3px var(--shadow-color);
+  position: relative;
+  -webkit-overflow-scrolling: touch; /* スマホでのスムーズなスクロール */
+}
+
+.gantt-table {
+  width: auto;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+  table-layout: fixed;
+}
+
+.gantt-table th,
+.gantt-table td {
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  text-align: center;
+  position: relative;
+}
+
+/* テーブルヘッダーを固定 */
+.gantt-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: #f5f5f5;
+  height: 50px;
+  vertical-align: middle;
+}
+
+.gantt-table th .day-of-week {
+  font-size: 0.8rem;
+  color: var(--text-color-light);
+  font-weight: normal;
+}
+
+.equipment-column {
+  width: 200px;
+  min-width: 200px;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background-color: #f5f5f5;
+  z-index: 15;
+  box-shadow: 2px 0 5px var(--shadow-color); /* 境界を明確にする影を追加 */
+}
+
+/* ヘッダーの機材情報セルは最前面 */
+.gantt-table thead th.equipment-column {
+  z-index: 25;
+}
+
+.date-column {
+  width: var(--cell-width-desktop);
+  min-width: var(--cell-width-desktop);
+}
+
+.equipment-info {
+  position: sticky;
+  left: 0;
+  background-color: #f5f5f5;
+  z-index: 15;
+  text-align: left;
+  box-shadow: 2px 0 5px var(--shadow-color); /* 境界を明確にする影を追加 */
+  padding: 10px;
+}
+
+.equipment-name {
+  font-weight: bold;
+  margin-bottom: 4px;
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+.equipment-details {
+  font-size: 0.85em;
+  color: var(--text-color-light);
+  line-height: 1.3;
+}
+
+.gantt-cell {
+  position: relative;
+  min-height: var(--row-base-height); /* 複数の貸出バーが重ならないよう高さを確保 */
+  padding: 0;
+  overflow: visible;
+  cursor: pointer; /* クリックでの貸出登録を明示 */
+}
+
+.gantt-cell:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* 行の背景色を交互に変更 */
+.gantt-table tbody tr:nth-child(odd) {
+  background-color: #fafafa;
+}
+
+.gantt-table tbody tr:nth-child(even) {
+  background-color: #ffffff;
+}
+
+/* 日付表示 */
+.weekend {
+  background-color: var(--weekend-color);
+}
+
+.today {
+  background-color: var(--today-color);
+}
+
+/* 貸出バー関連 */
+.rental-bar-container {
+  position: absolute;
+  left: 0;
+  height: var(--bar-height);
+  z-index: 10;
+  box-sizing: border-box;
+  transition: transform 0.1s, width 0.1s, left 0.1s;
+}
+
+.rental-bar-container:hover {
+  z-index: 20;
+  transform: scale(1.05);
+}
+
+.rental-bar {
+  width: 100%;
+  height: 100%;
+  background-color: var(--gantt-bar-color);
+  border-radius: 4px;
+  padding: 3px 6px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  font-size: 0.85em;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px var(--shadow-color);
+}
+
+.rental-bar:hover {
+  background-color: var(--gantt-bar-hover-color);
+}
+
+.rental-info {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rental-user {
+  opacity: 0.7;
+  margin-left: 4px;
+  font-size: 0.8em;
+}
+
+.rental-actions {
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.return-icon {
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.return-icon:hover {
+  color: #2196f3;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* リサイズハンドルを明確に */
+.rental-bar::before,
+.rental-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  background-color: rgba(0,0,0,0.1); /* 半透明の背景でハンドルを視覚化 */
+  border-radius: 4px;
+}
+
+.rental-bar::before {
+  left: 0;
+}
+
+.rental-bar::after {
+  right: 0;
+}
+
+/* ドラッグ中のスタイル */
+.rental-bar-dragging {
+  opacity: 0.8;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  cursor: grabbing;
+}
+
+/* リサイズ中のスタイル */
+.rental-bar-resizing {
+  opacity: 0.8;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* ドラッグ操作 */
+.drag-start {
+  background-color: var(--drag-highlight-color);
+}
+
+.drag-over {
+  background-color: var(--drag-highlight-color);
+}
+
+/* 貸出バーの重なり対応 - レベルに応じて配置 */
+.rental-bar-container:nth-child(1) { top: 5px; }
+.rental-bar-container:nth-child(2) { top: calc(5px + var(--bar-height) + 5px); }
+.rental-bar-container:nth-child(3) { top: calc(5px + (var(--bar-height) + 5px) * 2); }
+.rental-bar-container:nth-child(4) { top: calc(5px + (var(--bar-height) + 5px) * 3); }
+.rental-bar-container:nth-child(5) { top: calc(5px + (var(--bar-height) + 5px) * 4); }
+
+/* モーダル共通 */
+.modal {
+  max-width: 90%;
+  width: auto;
+  max-height: 90%;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.modal .modal-content {
+  padding: 20px 24px;
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+}
+
+.modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  height: auto;
+}
+
+.modal-fixed-footer {
+  height: auto;
+  max-height: 90vh;
+}
+
+.modal-fixed-footer .modal-content {
+  height: auto;
+  max-height: calc(90vh - 120px);
+}
+
+.modal h4 {
+  display: flex;
+  align-items: center;
+  margin-top: 0;
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.modal h4 .material-icons {
+  margin-right: 10px;
+}
+
+.modal h5 {
+  color: var(--primary-color);
+  font-size: 1.2rem;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.modal .input-field {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.modal .collection {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.modal .collection .collection-item {
+  padding: 10px 20px;
+}
+
+/* カード関連 */
+.card {
+  box-shadow: 0 2px 5px 0 var(--shadow-color);
+  border-radius: 6px;
+}
+
+.card .card-content {
+  padding: 16px;
+}
+
+.card .card-title {
+  font-size: 1.2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.card .card-action {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* 機器マスター管理モーダル */
+.equipment-list-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.equipment-form.mb-0 {
+  margin-bottom: 0;
+}
+
+/* 入力フィールドの高さと余白を縮小 */
+.compact-input {
+  margin-bottom: 8px !important;
+  height: 2.5rem !important;
+}
+
+/* 入力ラベルの余白調整 */
+.input-field {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* フォーム行の余白調整 */
+.equipment-form .row {
+  margin-bottom: 0;
+}
+
+/* チェックボックスのスタイル改善 */
+.checkbox-cell {
+  position: relative;
+  z-index: 5;
+}
+
+/* ローディング */
+.loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  display: none;
+}
+
+.loader-text {
+  margin-top: 20px;
+  font-size: 1.2rem;
+  color: var(--primary-color);
+}
+
+/* エラーダイアログ */
+.error-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  width: 90%;
+  max-width: 500px;
+}
+
+/* モバイル対応 */
+.mobile-device .date-column {
+  width: var(--cell-width-mobile);
+  min-width: var(--cell-width-mobile);
+  padding: 4px;
+}
+
+.mobile-device .equipment-column {
+  width: 150px;
+  min-width: 150px;
+}
+
+.mobile-device .equipment-name {
+  font-size: 0.9rem;
+}
+
+.mobile-device .equipment-details {
+  font-size: 0.8rem;
+}
+
+.mobile-device .rental-bar {
+  padding: 2px 4px;
+  font-size: 0.75rem;
+}
+
+.mobile-device .return-icon {
+  font-size: 16px;
+}
+
+.mobile-device .rental-user {
+  display: none;
+}
+
+.mobile-device main {
+  height: calc(100vh - var(--header-height-mobile));
+}
+
+.mobile-device .gantt-table th {
+  height: 40px;
+  padding: 4px;
+}
+
+.mobile-device .gantt-table td {
+  padding: 4px;
+}
+
+/* ユーザー設定 */
+.user-permissions-select {
+  width: auto !important;
+  display: inline-block !important;
+  height: 2rem !important;
+  margin-left: 10px;
+}
+
+/* サイドナビ */
+.sidenav .user-view {
+  padding: 16px 16px 8px;
+}
+
+.sidenav .divider {
+  margin: 8px 0;
+}
+
+.sidenav .subheader {
+  color: var(--primary-color);
+  padding: 0 16px;
+  font-weight: 500;
+}
+
+/* モバイル向けボタン */
+.mobile-device .btn {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 10px;
+}
+
+.mobile-device .btn i {
+  font-size: 1.2rem;
+  line-height: 32px;
+}
+
+/* 文字が見切れないようにする */
+.truncate-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ツールチップ */
+.material-tooltip {
+  background-color: #424242;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal.open {
+  animation: fadeIn 0.3s, slideInUp 0.3s;
+}
+
+/* フォームバリデーション */
+input.invalid, select.invalid {
+  border-bottom: 2px solid #F44336 !important;
+  box-shadow: 0 1px 0 0 #F44336 !important;
+}
+
+.validation-error {
+  color: #F44336;
+  font-size: 0.8rem;
+  margin-top: -15px;
+  margin-bottom: 10px;
+}
+
+/* タッチデバイスの最適化 */
+@media (hover: none) {
+  .rental-bar-container:hover {
+    transform: none;
+  }
+  
+  .rental-bar:hover {
+    background-color: var(--gantt-bar-color);
+  }
+  
+  .return-icon:hover {
+    color: inherit;
+    background-color: transparent;
+  }
+}
+
+/* レスポンシブ */
+@media only screen and (max-width: 992px) {
+  .equipment-column {
+    width: 180px;
+    min-width: 180px;
+  }
+  
+  .modal {
+    width: 95%;
+    max-width: 95%;
+  }
+}
+
+@media only screen and (max-width: 600px) {
+  :root {
+    --header-height-mobile: 230px;
+    --cell-width-mobile: 50px;
+  }
+  
+  .nav-wrapper .brand-logo {
+    font-size: 1.2rem;
+  }
+  
+  .button-row .btn {
+    margin: 2px;
+    padding: 0 8px;
+  }
+  
+  .equipment-column {
+    width: 120px;
+    min-width: 120px;
+  }
+  
+  .equipment-name {
+    font-size: 0.8rem;
+  }
+  
+  .equipment-details {
+    font-size: 0.7rem;
+  }
+  
+  .modal h4 {
+    font-size: 1.3rem;
+  }
+  
+  .modal .modal-content {
+    padding: 16px;
+  }
+  
+  .modal .modal-footer {
+    padding: 8px 16px;
+  }
+  
+  .calendar-nav .material-icons {
+    font-size: 1.1rem;
+    margin: 0 2px;
+  }
+  
+  .date-range {
+    font-size: 0.9rem;
+  }
+}
+
+/* 印刷スタイル */
+@media print {
+  header, .sidenav-trigger, .dropdown-trigger, button, .modal-trigger {
+    display: none !important;
+  }
+  
+  body, main {
+    height: auto;
+    overflow: visible;
+  }
+  
+  .gantt-container {
+    overflow: visible;
+    height: auto;
+  }
+  
+  .rental-bar {
+    box-shadow: none;
+    border: 1px solid #888;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  .gantt-table th, .gantt-table td {
+    border-color: #888;
+  }
+}
+</style>

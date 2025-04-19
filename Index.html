@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>機材貸出管理システム</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <?!= include('stylesheet'); ?>
+</head>
+<body>
+
+  <header class="main-header">
+    <nav class="teal">
+      <div class="nav-wrapper">
+        <a href="#" class="brand-logo center">機材貸出管理システム</a>
+        <ul class="right">
+          <li><a href="#!" id="fontSizeAdjust" title="文字サイズ調整"><i class="material-icons">format_size</i></a></li>
+          <li><a href="#" class="dropdown-trigger" data-target="userDropdown" title="ユーザーメニュー"><i class="material-icons">account_circle</i></a></li>
+           <li id="loginUserInfo" class="login-user-info hide-on-med-and-down">
+             <span>ログインユーザー: 読込中...</span>
+          </li>
+        </ul>
+      </div>
+    </nav>
+
+    <ul id="userDropdown" class="dropdown-content">
+      <li><a href="#" onclick="google.script.host.close()"><i class="material-icons">exit_to_app</i>閉じる</a></li>
+    </ul>
+
+    <div class="row control-row valign-wrapper">
+      <div class="col s12 m7 l8 button-group">
+        <button id="btnSiteManagement" class="btn waves-effect waves-light teal lighten-1 btn-small-custom">
+          <i class="material-icons left">location_city</i>現場管理
+        </button>
+        <button id="btnEquipmentManagement" class="btn waves-effect waves-light teal lighten-1 btn-small-custom">
+          <i class="material-icons left">build</i>機器管理
+        </button>
+      </div>
+      <div class="col s12 m5 l4 filter-group right-align">
+         <div class="input-field inline no-margin compact-field">
+            <select id="filterEquipment">
+              <option value="" selected>全ての機材</option>
+              </select>
+            <label>機材フィルター</label>
+          </div>
+      </div>
+    </div>
+
+    <div class="row calendar-nav-row valign-wrapper">
+       <div class="col s4 center-align">
+        <button id="btnPrev" class="btn-flat waves-effect waves-teal small-nav-btn">
+          <i class="material-icons">chevron_left</i>
+        </button>
+      </div>
+       <div class="col s4 center-align">
+         <span id="currentDateDisplay" class="current-date-display"></span> <button id="btnToday" class="btn-flat waves-effect waves-teal small-nav-btn">
+          <i class="material-icons">today</i>本日
+        </button>
+      </div>
+       <div class="col s4 center-align">
+        <button id="btnNext" class="btn-flat waves-effect waves-teal small-nav-btn">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div id="ganttContainer" class="gantt-container">
+      <table id="ganttTable" class="gantt-table">
+        <thead>
+          <tr id="ganttHeader">
+            <th class="equipment-column sticky-col"><span>機材情報</span></th>
+            </tr>
+        </thead>
+        <tbody id="ganttBody">
+          <tr><td colspan="15" style="text-align: center; padding: 20px; color: #777;">データを読み込み中...</td></tr>
+        </tbody>
+      </table>
+       <div id="ganttOverlay" class="gantt-overlay" style="display: none;"></div> </div>
+  </main>
+
+  <div id="siteManagementModal" class="modal modal-fixed-footer">
+    <div class="modal-content">
+      <h4>現場マスター管理</h4>
+      <div class="row">
+        <div class="input-field col s12 m8">
+          <input id="newSiteName" type="text" class="validate">
+          <label for="newSiteName">新しい現場名</label>
+        </div>
+        <div class="col s12 m4 add-button-wrapper">
+          <button id="btnAddSite" class="btn teal waves-effect waves-light">
+            <i class="material-icons left">add</i>追加
+          </button>
+        </div>
+      </div>
+      <div class="row site-list-section">
+        <div class="col s12">
+          <h5>登録済み現場リスト</h5>
+          <div id="siteListWrapper" class="site-list-wrapper">
+             <div id="siteList" class="collection">
+                <div class="collection-item">読み込み中...</div>
+             </div>
+          </div>
+        </div>
+      </div>
+      <div class="row delete-button-wrapper">
+        <div class="col s12 right-align">
+          <button id="btnDeleteSites" class="btn red waves-effect waves-light disabled">
+            <i class="material-icons left">delete</i>選択した現場を削除
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-close waves-effect waves-red btn-flat">閉じる</button>
+    </div>
+  </div>
+
+  <div id="equipmentManagementModal" class="modal modal-fixed-footer modal-large">
+    <div class="modal-content">
+      <h4>機器マスター管理</h4>
+      <div class="row">
+        <div class="col s12 l5">
+          <div class="card equipment-form-card">
+            <div class="card-content">
+              <span class="card-title" id="equipmentFormTitle">機器追加</span>
+               <input type="hidden" id="editEquipmentId"> <div class="row equipment-form">
+                  <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentName" type="text" class="validate" required>
+                    <label for="equipmentName">機器名称 <span class="red-text">*</span></label>
+                  </div>
+                  <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentTotal" type="number" class="validate" required min="1" value="1">
+                    <label for="equipmentTotal">総台数 <span class="red-text">*</span></label>
+                  </div>
+                   <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentSpec" type="text">
+                    <label for="equipmentSpec">仕様</label>
+                  </div>
+                  <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentModel" type="text">
+                    <label for="equipmentModel">型番</label>
+                  </div>
+                  <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentMaker" type="text">
+                    <label for="equipmentMaker">メーカー</label>
+                  </div>
+                   <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentSerial" type="text">
+                    <label for="equipmentSerial">シリアルNo</label>
+                  </div>
+                   <div class="input-field col s6 m3 compact-field">
+                     <select id="equipmentUnit">
+                        <option value="台" selected>台</option>
+                        <option value="個">個</option>
+                        <option value="セット">セット</option>
+                        <option value="本">本</option>
+                        <option value="">指定なし</option>
+                      </select>
+                    <label>呼称</label>
+                  </div>
+                  <div class="input-field col s12 m9 compact-field">
+                    <select id="equipmentLocation">
+                      <option value="">未選択</option>
+                      </select>
+                    <label>定置場所</label>
+                  </div>
+                   <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentNote1" type="text">
+                    <label for="equipmentNote1">備考1</label>
+                  </div>
+                  <div class="input-field col s12 m6 compact-field">
+                    <input id="equipmentNote2" type="text">
+                    <label for="equipmentNote2">備考2</label>
+                  </div>
+               </div>
+                <div class="card-action center-align action-button-area">
+                   <button id="btnCancelEdit" class="btn-flat waves-effect waves-grey" style="display: none;">
+                     <i class="material-icons left">cancel</i>キャンセル
+                   </button>
+                  <button id="btnAddOrUpdateEquipment" class="btn teal waves-effect waves-light">
+                    <i class="material-icons left">add</i>追加
+                  </button>
+                </div>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 l7">
+          <div class="card equipment-list-card">
+            <div class="card-content">
+              <span class="card-title">登録済み機器リスト (クリックで編集)</span>
+              <div class="equipment-list-container">
+                 <table id="equipmentListTable" class="striped highlight responsive-table">
+                   <thead>
+                     <tr>
+                       <th class="checkbox-col"><label><input type="checkbox" id="selectAllEquipmentCheckbox" class="filled-in"/><span></span></label></th>
+                       <th>管理番号</th>
+                       <th>機器名称</th>
+                       <th>総台数</th>
+                       <th>定置場所</th>
+                     </tr>
+                   </thead>
+                   <tbody id="equipmentListBody">
+                     <tr><td colspan="5" style="text-align: center; padding: 10px; color:#777;">読み込み中...</td></tr>
+                   </tbody>
+                 </table>
+              </div>
+               <div class="card-action right-align action-button-area">
+                 <button id="btnDeleteEquipment" class="btn red waves-effect waves-light disabled">
+                   <i class="material-icons left">delete</i>選択した機器を削除
+                 </button>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-close waves-effect waves-red btn-flat">閉じる</button>
+    </div>
+  </div>
+
+
+  <div id="rentalModal" class="modal modal-fixed-footer">
+    <div class="modal-content">
+      <h4>機材貸出登録</h4>
+      <input type="hidden" id="rentalEquipmentId"> <div class="row">
+        <div class="input-field col s12">
+          <input id="rentalEquipmentName" type="text" disabled class="grey lighten-3">
+          <label for="rentalEquipmentName" class="active">機材名称</label>
+        </div>
+        <div class="input-field col s6">
+          <input id="rentalStartDate" type="text" class="datepicker validate" required>
+          <label for="rentalStartDate">借用開始日 <span class="red-text">*</span></label>
+        </div>
+        <div class="input-field col s6">
+          <input id="rentalEndDate" type="text" class="datepicker validate" required>
+          <label for="rentalEndDate">借用終了日 <span class="red-text">*</span></label>
+        </div>
+        <div class="input-field col s6 m4">
+          <input id="rentalQuantity" type="number" class="validate" required min="1" value="1">
+          <label for="rentalQuantity">数量 <span class="red-text">*</span></label>
+        </div>
+         <div class="input-field col s6 m8">
+          <select id="rentalSite" class="validate" required>
+            <option value="" disabled selected>選択してください</option>
+            </select>
+          <label>使用場所 <span class="red-text">*</span></label>
+        </div>
+        <div class="input-field col s12">
+           <input id="rentalBorrower" type="text" disabled class="grey lighten-3">
+          <label for="rentalBorrower" class="active">借用者 (自動入力)</label>
+        </div>
+        <div class="input-field col s12">
+          <input id="rentalSourceLocation" type="text">
+          <label for="rentalSourceLocation">貸出元 (任意)</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-close waves-effect waves-red btn-flat">キャンセル</button>
+      <button id="btnRegisterRental" class="waves-effect waves-light btn teal">
+          <i class="material-icons left">add</i>登録
+      </button>
+    </div>
+  </div>
+
+  <div id="returnModal" class="modal modal-fixed-footer">
+    <div class="modal-content">
+      <h4>機材返却登録</h4>
+       <input type="hidden" id="returnRentalId"> <input type="hidden" id="returnCurrentQuantity"> <div class="row">
+         <div class="input-field col s12">
+          <input id="returnEquipmentName" type="text" disabled class="grey lighten-3">
+          <label for="returnEquipmentName" class="active">機材名称</label>
+        </div>
+        <div class="input-field col s6">
+          <input id="returnDate" type="text" class="datepicker validate" required>
+          <label for="returnDate">返却日 <span class="red-text">*</span></label>
+        </div>
+        <div class="input-field col s6">
+           <input id="returnQuantity" type="number" class="validate" required min="1" value="1">
+          <label for="returnQuantity">返却数量 <span class="red-text">*</span></label>
+        </div>
+         <div class="input-field col s12">
+           <input id="returnBorrower" type="text" disabled class="grey lighten-3">
+          <label for="returnBorrower" class="active">借用者</label>
+        </div>
+         <div class="input-field col s12">
+           <input id="returnSite" type="text" disabled class="grey lighten-3">
+          <label for="returnSite" class="active">使用場所</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-close waves-effect waves-red btn-flat">キャンセル</button>
+      <button id="btnRegisterReturn" class="waves-effect waves-light btn teal">
+         <i class="material-icons left">undo</i>返却
+      </button>
+    </div>
+  </div>
+
+   <div id="errorDialogModal" class="modal">
+    <div class="modal-content">
+      <h4 id="errorDialogTitle" class="red-text">エラー</h4>
+      <p id="errorDialogMessage" style="white-space: pre-line;"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-close waves-effect waves-red btn-flat">OK</button>
+    </div>
+  </div>
+
+   <div id="fontSizeModal" class="modal">
+      <div class="modal-content">
+         <h4>文字サイズ調整</h4>
+         <p>スライダーで全体の文字サイズを調整します。</p>
+         <p class="range-field">
+            <input type="range" id="fontSizeSlider" min="80" max="150" value="100" />
+            <span id="fontSizeValue">100%</span>
+         </p>
+      </div>
+      <div class="modal-footer">
+         <button id="resetFontSize" class="waves-effect waves-grey btn-flat">リセット</button>
+         <button class="modal-close waves-effect waves-teal btn-flat">閉じる</button>
+      </div>
+   </div>
+
+  <div id="loader" class="loader-overlay">
+    <div class="preloader-wrapper big active">
+      <div class="spinner-layer spinner-teal-only">
+        <div class="circle-clipper left">
+          <div class="circle"></div>
+        </div><div class="gap-patch">
+          <div class="circle"></div>
+        </div><div class="circle-clipper right">
+          <div class="circle"></div>
+        </div>
+      </div>
+    </div>
+     <div class="loader-text">処理中...</div>
+  </div>
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+  <script>
+    // グローバルエラーハンドラ (変更なし)
+    window.onerror = function(message, source, lineno, colno, error) { console.error('Unhandled Error:', message, 'at', source, 'line', lineno); const displayMessage = `エラーが発生しました: ${message}`; if (typeof M !== 'undefined' && M.toast) M.toast({html: displayMessage, classes: 'red darken-2', displayLength: 10000}); else alert(displayMessage); const loader = document.getElementById('loader'); if (loader && loader.style.display !== 'none') loader.style.display = 'none'; return true; };
+    // GAS サーバーサイド呼び出しのエラーハンドラ (変更なし)
+    function handleGasError(error, functionName = 'サーバー処理') { console.error(`${functionName} エラー:`, error); let errorMessage = `サーバー処理中にエラーが発生しました。`; if (error && error.message) errorMessage += `\n詳細: ${error.message.replace(/^Exception: /i, '')}`; else if (typeof error === 'string') errorMessage += `\n詳細: ${error}`; showErrorDialog('サーバーエラー', errorMessage); hideLoader(); }
+    // ローダー表示/非表示関数 (変更なし)
+    function showLoader(message = '処理中...') { const loader = document.getElementById('loader'); const loaderText = loader.querySelector('.loader-text'); if (loaderText) loaderText.textContent = message; loader.style.display = 'flex'; }
+    function hideLoader() { const loader = document.getElementById('loader'); loader.style.display = 'none'; }
+    // エラーダイアログ表示関数（変更なし）
+    function showErrorDialog(title, message) { const modal = document.getElementById('errorDialogModal'); const titleElement = document.getElementById('errorDialogTitle'); const messageElement = document.getElementById('errorDialogMessage'); if (modal && titleElement && messageElement) { titleElement.textContent = title; messageElement.textContent = message; const instance = M.Modal.getInstance(modal); if (instance) instance.open(); else M.Modal.init(modal).open(); } else { console.error('Error dialog elements not found!'); M.toast({html: `${title}: ${message}`, classes: 'red darken-2', displayLength: 8000}); } }
+  </script>
+  <?!= include('Javascript'); ?>
+
+</body>
+</html>
